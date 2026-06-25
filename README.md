@@ -11,7 +11,7 @@ built a real-time factchecker called intruth for live debates, speeches, intervi
 
 it listens to audio from the active browser tab, identifies factual claims as they are made, and provides instant evidence-based verdicts using AI analysis and web research; most fact-checking docs come out days after debates, but now users can evaluate claims as they're made.
 
-this is part of a bigger research project so more to come!
+this is part of a bigger research project @ my university so more to come!
 
 ## features
 
@@ -103,20 +103,9 @@ this extension is as an informational tool and NOT a definitive authority !
 * User-provided AI API key
 * Modern Chromium-based browser
 
-### recipe
+## contributing
 
-1. clone repo
-2. open Chrome Extensions
-3. enable Developer Mode
-4. load unpacked
-5. choose project dir
-6. configure your anthropic API key
-7. press startttt
-
-## Contributing
-
-would love advice, any features you'd like, and any edge cases you've found! haiku can be overly pedantic so i expect many ....
-
+would love advice, any features you'd like, and any edge cases you've found! 
 ## license
 
-MIT License
+view license tab
