@@ -5,7 +5,7 @@ hi everyone!
 https://chromewebstore.google.com/detail/InTruth/ikmpglbpcdoapfelcbfpoaddmhmaaocg?hl=en&authuser=0
 
 built a real-time factchecker called intruth for live debates, speeches, interviews, press conferences, and political events!
-
+multilang support was just added, it now works on debates in any of the selectable languages!!
 
 <img width="400" height="225" alt="image" src="https://github.com/user-attachments/assets/a0a8fba9-c28f-473c-866d-84951a9b548e" />
 
