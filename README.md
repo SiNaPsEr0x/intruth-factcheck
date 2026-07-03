@@ -11,7 +11,7 @@ multilang support was just added, it now works on debates in any of the selectab
 
 it listens to audio from the active browser tab, identifies factual claims as they are made, and provides instant evidence-based verdicts using AI analysis and web research; most fact-checking docs come out days after debates, but now users can evaluate claims as they're made.
 
-this is part of a bigger research project @ my university so more to come!
+this is part of a bigger research project assessing how deception in political speech is prosodically / linguistically different than deception in other contexts (rehearsed / read speech), so more to come!
 
 ## features
 
