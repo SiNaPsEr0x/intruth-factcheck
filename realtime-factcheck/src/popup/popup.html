@@ -29,10 +29,14 @@
         </label>
         <div class="key-hint" id="bridgeHint">Runs Claude via your subscription — start <code>warm-bridge.js</code> first.</div>
       </div>
-      <div class="key-field" id="deepgramKeyField">
-        <label class="key-label">Deepgram API Key</label>
-        <input class="key-input" id="deepgramKey" type="password" placeholder="Deepgram API key" autocomplete="off"/>
-        <div class="key-hint" id="deepgramHint">Powers live transcription — get a free key at <a class="key-link" href="https://console.deepgram.com/signup" target="_blank" rel="noopener">console.deepgram.com</a>.</div>
+      <div class="key-field" id="whisperModelField">
+        <label class="key-label">Transcription (local, WebGPU)</label>
+        <select class="key-input key-select" id="whisperModel">
+          <option value="tiny">Tiny — fastest, least accurate</option>
+          <option value="base">Base — balanced (recommended)</option>
+          <option value="small">Small — most accurate, heavier</option>
+        </select>
+        <div class="key-hint" id="whisperHint">Runs Whisper in your browser via WebGPU — no key, no cloud. First run downloads the model (cached afterwards).</div>
       </div>
       <div class="key-field" id="apiKeyField">
         <label class="key-label">Anthropic API Key</label>

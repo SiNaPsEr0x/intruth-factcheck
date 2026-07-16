@@ -1,27 +1,70 @@
-// offscreen.js
-// Captures tab audio via tabCapture and streams to Deepgram WebSocket.
-// Deepgram handles transcription — no Web Speech API.
+// offscreen-ex.js
+// Captures tab audio via tabCapture and transcribes it entirely on-device with
+// Whisper (ONNX) running on the GPU via WebGPU, using Transformers.js. No cloud
+// speech-to-text and no API key: the model is downloaded from HuggingFace on
+// first run and cached by the browser, so later sessions load it from cache.
 
-// The Deepgram API key is NOT hardcoded here. It is entered by the user in the
-// extension popup, saved to chrome.storage.local, and delivered with each
-// START_CAPTURE message. We cache the last values so silent reconnects
-// (REQUEST_NEW_STREAM) can reuse them without the popup being open.
-let deepgramKey = '';
-let lastLanguage = 'en';
+import { env, pipeline, WhisperTextStreamer } from '../vendor/transformers.min.js';
 
-let mediaStream = null;
-let audioContext = null;
-let processor = null;
-let socket = null;
-let active = false;
+// ── Transformers.js / ONNX Runtime setup ─────────────────────────────────────
+// MV3 CSP forbids remote scripts, so the ONNX Runtime Web wasm is vendored
+// locally under src/vendor/. Pin the exact files — the "asyncify" build ships
+// the WebGPU execution provider and also runs the plain CPU-wasm fallback.
+env.allowLocalModels = false; // model weights are fetched from HuggingFace
+// Point ORT at the vendored wasm (defensive optional-chaining so a not-yet
+// populated backend object can't throw at module load). The bundle only falls
+// back to its jsdelivr CDN when wasmPaths is unset, so setting it here wins.
+env.backends.onnx ??= {};
+env.backends.onnx.wasm ??= {};
+env.backends.onnx.wasm.wasmPaths = {
+  mjs:  chrome.runtime.getURL('src/vendor/ort-wasm-simd-threaded.asyncify.mjs'),
+  wasm: chrome.runtime.getURL('src/vendor/ort-wasm-simd-threaded.asyncify.wasm'),
+};
+// An offscreen document is not cross-origin isolated, so SharedArrayBuffer is
+// unavailable and ORT must stay single-threaded (WebGPU does the heavy lifting).
+env.backends.onnx.wasm.numThreads = 1;
+
+// Popup exposes tiny/base/small; map to the multilingual ONNX repos.
+const MODEL_IDS = {
+  tiny:  'onnx-community/whisper-tiny',
+  base:  'onnx-community/whisper-base',
+  small: 'onnx-community/whisper-small',
+};
+
+// ── Audio / transcription tuning ─────────────────────────────────────────────
+const SAMPLE_RATE        = 16000;
+const MAX_WINDOW_S       = 30;                  // Whisper's receptive field
+const MAX_SAMPLES        = MAX_WINDOW_S * SAMPLE_RATE;
+const INFERENCE_EVERY_MS = 1500;                // cadence of interim passes
+const SILENCE_COMMIT_MS  = 2500;                // pause length that ends an utterance
+const SILENCE_RMS        = 0.006;               // energy threshold for the VAD
+const MIN_INFER_SAMPLES  = SAMPLE_RATE * 0.5;   // need ≥0.5s before transcribing
+
+let transcriber   = null;
+let currentModel  = null;
+let language      = 'en';
+
+let mediaStream   = null;
+let audioContext  = null;
+let worklet       = null;
+let active        = false;
+
+// rolling Float32 buffer of audio not yet committed as a final utterance
+let audio           = new Float32Array(0);
+let inferenceTimer  = null;
+let busy            = false;
+
+// VAD state
+let lastVoiceTime        = 0;
+let hasSpeechSinceCommit = false;
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg.type === 'START_CAPTURE') {
-    startCapture(msg.streamId, msg.language || lastLanguage, msg.deepgramKey)
+    startCapture(msg.streamId, msg.language || language, msg.whisperModel)
       .then(() => sendResponse({ ok: true }))
       .catch(err => {
-        // DOMException stringifies to a useless "[object DOMException]" — surface
-        // its .name and .message so the real cause is visible in the error panel.
+        // DOMExceptions stringify to a useless "[object DOMException]" — surface
+        // .name/.message so the real cause shows up in the error panel.
         const detail = err && err.name ? `${err.name}: ${err.message}` : String(err);
         console.error('[offscreen] startCapture failed:', detail);
         sendResponse({ ok: false, error: detail });
@@ -35,24 +78,53 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   }
 });
 
-let utteranceBuffer = '';
-let utteranceSpeakerCounts = {}; // track speaker word counts across buffer chunks
+// ── Model loading ─────────────────────────────────────────────────────────────
 
-async function startCapture(streamId, language = 'en', key) {
+async function loadPipeline(modelId, device) {
+  return pipeline('automatic-speech-recognition', modelId, {
+    device,
+    // fp32 encoder + 4-bit decoder is the standard WebGPU config; on the CPU
+    // fallback use a uniform 8-bit quantization to keep it tractable.
+    dtype: device === 'webgpu'
+      ? { encoder_model: 'fp32', decoder_model_merged: 'q4' }
+      : 'q8',
+    progress_callback: (p) => {
+      chrome.runtime.sendMessage({ type: 'MODEL_PROGRESS', device, ...p }).catch(() => {});
+    },
+  });
+}
+
+async function ensureModel(modelId) {
+  if (transcriber && currentModel === modelId) return;
+  if (transcriber) { try { await transcriber.dispose?.(); } catch {} transcriber = null; }
+  currentModel = modelId;
+
+  const wantGpu = ('gpu' in navigator);
+  chrome.runtime.sendMessage({
+    type: 'MODEL_PROGRESS', status: 'initiate', device: wantGpu ? 'webgpu' : 'wasm',
+  }).catch(() => {});
+
+  try {
+    transcriber = await loadPipeline(modelId, wantGpu ? 'webgpu' : 'wasm');
+  } catch (err) {
+    // WebGPU can be present but fail to acquire an adapter; fall back to CPU wasm.
+    if (wantGpu) {
+      console.warn('[offscreen] WebGPU load failed, falling back to wasm:', err);
+      transcriber = await loadPipeline(modelId, 'wasm');
+    } else {
+      throw err;
+    }
+  }
+
+  chrome.runtime.sendMessage({ type: 'MODEL_PROGRESS', status: 'ready' }).catch(() => {});
+}
+
+// ── Capture ───────────────────────────────────────────────────────────────────
+
+async function startCapture(streamId, lang = 'en', modelSize) {
   if (active) stopCapture();
   active = true;
-
-  // The Deepgram key arrives with START_CAPTURE (saved by the popup in
-  // chrome.storage.local); cache it so silent reconnects can reuse it. Without a
-  // key the WebSocket subprotocol below would be ['token', ''] — and an empty
-  // subprotocol throws an opaque "subprotocol '' is invalid" SyntaxError. Fail
-  // fast with a clear, actionable reason instead.
-  if (key) deepgramKey = key;
-  lastLanguage = language;
-  if (!deepgramKey) {
-    active = false;
-    throw new Error('Deepgram API key missing — open the InTruth popup and paste your Deepgram key.');
-  }
+  language = lang;
 
   // A tabCapture stream ID is single-use and short-lived; an empty/expired one
   // makes getUserMedia throw an opaque DOMException. Fail fast with a clear reason.
@@ -60,6 +132,15 @@ async function startCapture(streamId, language = 'en', key) {
     active = false;
     throw new Error('No tab stream ID — getMediaStreamId returned empty (tab busy or no active-tab permission?).');
   }
+
+  const modelId = MODEL_IDS[modelSize] || MODEL_IDS.base;
+  try {
+    await ensureModel(modelId);
+  } catch (err) {
+    active = false;
+    throw new Error(`Whisper model load failed: ${err.name || 'Error'} — ${err.message || err}`);
+  }
+  if (!active) return; // stopped while the model was still loading
 
   // get tab audio stream
   try {
@@ -74,173 +155,139 @@ async function startCapture(streamId, language = 'en', key) {
     });
   } catch (err) {
     active = false;
-    // Re-throw with the DOMException name/message attached so the caller logs the real cause.
     throw new Error(`getUserMedia(tab) failed: ${err.name || 'Error'} — ${err.message || err}`);
   }
 
-  // connect deepgram websocket
-  socket = new WebSocket(
-    'wss://api.deepgram.com/v1/listen?' + [
-      'encoding=linear16',
-      'sample_rate=16000',
-      'channels=1',
-      'model=nova-2',
-      'language=' + language,
-      'punctuate=true',
-      'interim_results=true',
-      'utterance_end_ms=2500',
-      'smart_format=true',
-      'vad_events=true',
-      'diarize=true',
-    ].join('&'),
-    ['token', deepgramKey]
-  );
-
-  socket.onopen = () => {
-    console.log('[offscreen] deepgram connected');
-    startAudioPipeline().catch(err => {
-      const detail = err && err.name ? `${err.name}: ${err.message}` : String(err);
-      console.error('[offscreen] audio pipeline failed:', detail);
-      chrome.runtime.sendMessage({ type: 'PIPELINE_ERROR', message: 'Audio pipeline failed: ' + detail }).catch(() => {});
-    });
-  };
-
-  socket.onmessage = (event) => {
-    try {
-      const data = JSON.parse(event.data);
-
-      // handle utterance end event
-      if (data.type === 'UtteranceEnd') {
-        chrome.runtime.sendMessage({ type: 'UTTERANCE_END' });
-        return;
-      }
-
-      const result = data.channel?.alternatives?.[0];
-      if (!result || !result.transcript) return;
-
-      const text    = result.transcript.trim();
-      const isFinal = data.is_final;
-      const speech  = data.speech_final;
-
-      // accumulate speaker word counts from every chunk
-      if (result.words?.length) {
-        result.words.forEach(w => {
-          if (w.speaker !== null && w.speaker !== undefined) {
-            utteranceSpeakerCounts[w.speaker] = (utteranceSpeakerCounts[w.speaker] || 0) + 1;
-          }
-        });
-      }
-
-      // dominant speaker = whoever had the most words in this utterance so far
-      function getDominantSpeaker() {
-        const entries = Object.entries(utteranceSpeakerCounts);
-        if (!entries.length) return null;
-        return parseInt(entries.sort((a, b) => b[1] - a[1])[0][0]);
-      }
-
-      if (!text) return;
-
-      if (isFinal && speech) {
-        // speech_final = end of utterance — send full accumulated text as final
-        const fullText = utteranceBuffer ? utteranceBuffer + ' ' + text : text;
-        const speaker  = getDominantSpeaker();
-        utteranceBuffer = '';
-        utteranceSpeakerCounts = {};
-        chrome.runtime.sendMessage({
-          type:    'TRANSCRIPT_RESULT',
-          text:    fullText.trim(),
-          isFinal: true,
-          interim: false,
-          speaker,
-        });
-      } else if (isFinal && !speech) {
-        // is_final but not speech_final — accumulate and show as interim
-        utteranceBuffer += (utteranceBuffer ? ' ' : '') + text;
-        chrome.runtime.sendMessage({
-          type:    'TRANSCRIPT_RESULT',
-          text:    utteranceBuffer,
-          isFinal: false,
-          interim: true,
-          speaker: getDominantSpeaker(),
-        });
-      } else {
-        // regular interim — show as-is
-        chrome.runtime.sendMessage({
-          type:    'TRANSCRIPT_RESULT',
-          text,
-          isFinal: false,
-          interim: true,
-          speaker: getDominantSpeaker(),
-        });
-      }
-
-    } catch (err) {
-      console.error('[offscreen] message parse error:', err);
-    }
-  };
-
-  socket.onerror = (err) => {
-    console.error('[offscreen] deepgram error:', err);
-    chrome.runtime.sendMessage({ type: 'PIPELINE_ERROR', message: 'Transcription error — check your Deepgram key.' }).catch(() => {});
-  };
-  socket.onclose = (e) => {
-    console.log('[offscreen] deepgram closed:', e.code, e.reason);
-    if (e.code === 1008 || e.code === 1011) {
-      // auth error or server error — don't reconnect, notify user
-      chrome.runtime.sendMessage({ type: 'PIPELINE_ERROR', message: 'Deepgram connection failed (code ' + e.code + '). Check your API key.' }).catch(() => {});
-      return;
-    }
-    if (active) {
-      chrome.runtime.sendMessage({ type: 'PIPELINE_ERROR', message: 'Transcription disconnected — reconnecting...' }).catch(() => {});
-      // request a fresh stream ID from service worker instead of reusing expired one
-      setTimeout(() => {
-        chrome.runtime.sendMessage({ type: 'REQUEST_NEW_STREAM' }).catch(() => {});
-      }, 1000);
-    }
-  };
+  await startAudioPipeline();
+  startInferenceLoop();
 }
 
 async function startAudioPipeline() {
-  audioContext = new AudioContext({ sampleRate: 16000 });
+  audioContext = new AudioContext({ sampleRate: SAMPLE_RATE });
   const source = audioContext.createMediaStreamSource(mediaStream);
 
-  // reconnect so user still hears video
+  // reconnect to destination so the user still hears the video
   source.connect(audioContext.destination);
 
-  // AudioWorklet replaces the deprecated ScriptProcessorNode.
-  // float32→int16 conversion happens on the audio thread (pcm-worklet.js).
+  // AudioWorklet delivers Float32 mono @16kHz batches on the audio thread.
   await audioContext.audioWorklet.addModule('pcm-worklet.js');
-
-  processor = new AudioWorkletNode(audioContext, 'pcm-capture', {
+  worklet = new AudioWorkletNode(audioContext, 'pcm-capture', {
     numberOfInputs: 1,
     numberOfOutputs: 1,
     channelCount: 1,
   });
 
-  processor.port.onmessage = (e) => {
-    if (socket?.readyState !== WebSocket.OPEN) return;
-    socket.send(e.data); // already an int16 ArrayBuffer
+  worklet.port.onmessage = (e) => {
+    if (!active) return;
+    appendAudio(new Float32Array(e.data)); // e.data is a transferred ArrayBuffer
   };
 
-  source.connect(processor);
-  // keep the node in the rendering graph so it gets pulled; its output is silent
-  processor.connect(audioContext.destination);
-  console.log('[offscreen] audio pipeline started (AudioWorklet)');
+  source.connect(worklet);
+  // keep the node pulled by the render graph; its output stays silent
+  worklet.connect(audioContext.destination);
+  console.log('[offscreen] audio pipeline started (AudioWorklet → Whisper)');
+}
+
+function appendAudio(chunk) {
+  // energy-based VAD: track when we last heard speech
+  let sum = 0;
+  for (let i = 0; i < chunk.length; i++) sum += chunk[i] * chunk[i];
+  const rms = Math.sqrt(sum / chunk.length);
+  if (rms > SILENCE_RMS) {
+    lastVoiceTime = Date.now();
+    hasSpeechSinceCommit = true;
+  }
+
+  // append to the rolling buffer, capping at MAX_SAMPLES (drop oldest)
+  const merged = new Float32Array(audio.length + chunk.length);
+  merged.set(audio, 0);
+  merged.set(chunk, audio.length);
+  audio = merged.length > MAX_SAMPLES ? merged.slice(merged.length - MAX_SAMPLES) : merged;
+}
+
+// ── Inference loop (sliding window + VAD commit) ──────────────────────────────
+
+function startInferenceLoop() {
+  lastVoiceTime = Date.now();
+  hasSpeechSinceCommit = false;
+  inferenceTimer = setInterval(() => { runInference().catch(() => {}); }, INFERENCE_EVERY_MS);
+}
+
+async function runInference() {
+  if (!active || busy) return;
+  if (audio.length < MIN_INFER_SAMPLES) return;
+  if (!hasSpeechSinceCommit) return; // only silence since last commit — nothing to do
+
+  const silenceMs = Date.now() - lastVoiceTime;
+  const bufferFull = audio.length >= MAX_SAMPLES * 0.95;
+  // Commit a final when the speaker pauses long enough, or the 30s window is
+  // about to overflow (long monologue with no pause).
+  const shouldCommit = hasSpeechSinceCommit && (silenceMs >= SILENCE_COMMIT_MS || bufferFull);
+
+  busy = true;
+  const snapshot = audio; // transcribe the current window
+  try {
+    let streamed = '';
+    const streamer = new WhisperTextStreamer(transcriber.tokenizer, {
+      skip_prompt: true,
+      callback_function: (token) => {
+        streamed += token;
+        // stream partial text as interim while decoding (skip during a commit —
+        // the final text is emitted once below)
+        if (!shouldCommit) {
+          chrome.runtime.sendMessage({
+            type: 'TRANSCRIPT_RESULT', text: streamed.trim(),
+            isFinal: false, interim: true, speaker: null,
+          }).catch(() => {});
+        }
+      },
+    });
+
+    const out = await transcriber(snapshot, {
+      language,
+      task: 'transcribe',
+      streamer,
+    });
+    const text = (out?.text ?? streamed).trim();
+
+    if (shouldCommit) {
+      if (text) {
+        // Whisper does not diarize; speaker is null and Claude attributes it
+        // from the surrounding context (speaker names / page title).
+        chrome.runtime.sendMessage({
+          type: 'TRANSCRIPT_RESULT', text, isFinal: true, interim: false, speaker: null,
+        }).catch(() => {});
+        chrome.runtime.sendMessage({ type: 'UTTERANCE_END' }).catch(() => {});
+      }
+      // drop the committed window but keep any audio that streamed in during
+      // inference (snapshot is a prefix of the current buffer); reset the VAD.
+      audio = audio.length > snapshot.length ? audio.slice(snapshot.length) : new Float32Array(0);
+      hasSpeechSinceCommit = false;
+      lastVoiceTime = Date.now();
+    } else if (text) {
+      chrome.runtime.sendMessage({
+        type: 'TRANSCRIPT_RESULT', text, isFinal: false, interim: true, speaker: null,
+      }).catch(() => {});
+    }
+  } catch (err) {
+    const detail = err && err.name ? `${err.name}: ${err.message}` : String(err);
+    console.error('[offscreen] inference error:', detail);
+    chrome.runtime.sendMessage({ type: 'PIPELINE_ERROR', message: 'Transcription error: ' + detail }).catch(() => {});
+  } finally {
+    busy = false;
+  }
 }
 
 function stopCapture() {
   active = false;
-  utteranceBuffer = '';
-  utteranceSpeakerCounts = {};
+  if (inferenceTimer) { clearInterval(inferenceTimer); inferenceTimer = null; }
+  audio = new Float32Array(0);
+  busy = false;
+  hasSpeechSinceCommit = false;
 
-  if (socket) {
-    socket.close();
-    socket = null;
-  }
-
-  if (processor) {
-    processor.disconnect();
-    processor = null;
+  if (worklet) {
+    worklet.disconnect();
+    worklet = null;
   }
 
   if (mediaStream) {
@@ -253,5 +300,6 @@ function stopCapture() {
     audioContext = null;
   }
 
+  // keep `transcriber` loaded so a restart reuses the warm model
   console.log('[offscreen] stopped');
 }

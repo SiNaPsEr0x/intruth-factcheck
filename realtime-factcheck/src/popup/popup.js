@@ -3,7 +3,7 @@
 const toggleBtn   = document.getElementById('toggleBtn');
 const statusEl    = document.getElementById('status');
 const anthropicEl = document.getElementById('anthropicKey');
-const deepgramEl  = document.getElementById('deepgramKey');
+const whisperEl   = document.getElementById('whisperModel');
 const keyHint     = document.getElementById('keyHint');
 const keysSection = document.getElementById('keysSection');
 const languageEl  = document.getElementById('languageSelect');
@@ -26,9 +26,9 @@ let isActive = false;
 
 // ── Load saved key and language ───────────────────────────────────────────────
 
-chrome.storage.local.get(['anthropicKey', 'deepgramKey', 'transcriptLanguage', 'selectedModel', 'useBridge'], (data) => {
+chrome.storage.local.get(['anthropicKey', 'whisperModel', 'transcriptLanguage', 'selectedModel', 'useBridge'], (data) => {
   if (data.anthropicKey) { anthropicEl.value = data.anthropicKey; anthropicEl.classList.add('saved'); }
-  if (data.deepgramKey) { deepgramEl.value = data.deepgramKey; deepgramEl.classList.add('saved'); }
+  whisperEl.value = data.whisperModel || 'base';
   if (data.transcriptLanguage) languageEl.value = data.transcriptLanguage;
   if (data.selectedModel) modelEl.value = data.selectedModel;
   useBridgeEl.checked = !!data.useBridge;
@@ -49,14 +49,8 @@ anthropicEl.addEventListener('change', () => {
   updateHint();
 });
 
-deepgramEl.addEventListener('input', () => {
-  deepgramEl.classList.remove('saved');
-  updateHint();
-});
-deepgramEl.addEventListener('change', () => {
-  chrome.storage.local.set({ deepgramKey: deepgramEl.value.trim() });
-  deepgramEl.classList.add('saved');
-  updateHint();
+whisperEl.addEventListener('change', () => {
+  chrome.storage.local.set({ whisperModel: whisperEl.value });
 });
 
 // ── Save language on change ───────────────────────────────────────────────────
@@ -85,14 +79,8 @@ function updateBridgeUI() {
 }
 
 function updateHint() {
-  // Transcription always runs through Deepgram, so its key is required in every
-  // mode (bridge or direct). Check it first.
-  if (!deepgramEl.value.trim()) {
-    keyHint.textContent = 'Enter your Deepgram API key to start.';
-    keyHint.className = 'key-hint';
-    toggleBtn.disabled = isActive ? false : true;
-    return;
-  }
+  // Transcription runs on-device (Whisper via WebGPU) and needs no key. Only the
+  // Claude credentials gate starting, unless the local subscription bridge is on.
   if (useBridgeEl.checked) {
     keyHint.textContent = 'Using local subscription bridge.';
     keyHint.className = 'key-hint ok';
@@ -137,14 +125,7 @@ toggleBtn.addEventListener('click', async () => {
   }
 
   const anthropicKey = anthropicEl.value.trim();
-  const deepgramKey  = deepgramEl.value.trim();
   const useBridge    = useBridgeEl.checked;
-
-  if (!deepgramKey) {
-    keyHint.textContent = 'Please enter your Deepgram API key.';
-    keyHint.className   = 'key-hint error';
-    return;
-  }
 
   if (!useBridge && !anthropicKey) {
     keyHint.textContent = 'Please enter your Anthropic API key.';
@@ -152,10 +133,10 @@ toggleBtn.addEventListener('click', async () => {
     return;
   }
 
-  // save keys, language, model and bridge preference then start
+  // save key, Whisper model, language, Claude model and bridge preference then start
   await new Promise(r => chrome.storage.local.set({
     anthropicKey,
-    deepgramKey,
+    whisperModel: whisperEl.value,
     transcriptLanguage: languageEl.value,
     selectedModel: modelEl.value,
     useBridge,

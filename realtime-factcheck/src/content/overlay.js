@@ -328,7 +328,7 @@ function showSpeakerBanner(speakerId, sample) {
 
 function allSpeakersConfirmed() {
   // true only when every speaker parsed from the title has been confirmed (or skipped) by the user
-  // Deepgram assigns IDs 0, 1, 2... in order of first appearance — matches speakers array indices
+  // speaker IDs 0, 1, 2... are assigned in order of first appearance — matches speakers array indices
   if (!speakers.length) return false;
   return speakers.every((_, i) => String(i) in confirmedSpeakerMap);
 }
@@ -360,7 +360,7 @@ function retryTagAllCards() {
 // ── Speaker editor ───────────────────────────────────────────────────────────
 
 function sendSpeakerMap() {
-  // Deepgram speaker IDs are assigned in order of first appearance
+  // speaker IDs are assigned in order of first appearance
   // We map ID 0 → speakers[0], ID 1 → speakers[1], etc.
   const speakerIdToName = {};
   speakers.forEach((name, i) => { speakerIdToName[i] = name; });
@@ -943,6 +943,20 @@ chrome.runtime.onMessage.addListener((msg) => {
 
     case 'PIPELINE_ERROR':
       showError(msg.message || t('pipelineError'));
+      break;
+
+    case 'MODEL_PROGRESS':
+      // show transcription-model download/load progress in the interim line; it
+      // is transient and gets replaced by real interim transcripts once ready.
+      if (msg.status === 'ready') {
+        clearInterim();
+      } else if (typeof msg.progress === 'number' && msg.progress < 100) {
+        const pct = Math.round(msg.progress);
+        const name = (msg.file || '').split('/').pop() || 'model';
+        updateInterim(`⬇ Loading transcription model (${name}) — ${pct}%`);
+      } else if (msg.status === 'initiate' || msg.status === 'download') {
+        updateInterim('⬇ Loading transcription model…');
+      }
       break;
 
     case 'NEW_VERDICT':
