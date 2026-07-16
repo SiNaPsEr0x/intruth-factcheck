@@ -98,7 +98,11 @@ async function startCapture(streamId, language = 'en', key) {
 
   socket.onopen = () => {
     console.log('[offscreen] deepgram connected');
-    startAudioPipeline();
+    startAudioPipeline().catch(err => {
+      const detail = err && err.name ? `${err.name}: ${err.message}` : String(err);
+      console.error('[offscreen] audio pipeline failed:', detail);
+      chrome.runtime.sendMessage({ type: 'PIPELINE_ERROR', message: 'Audio pipeline failed: ' + detail }).catch(() => {});
+    });
   };
 
   socket.onmessage = (event) => {
@@ -196,31 +200,32 @@ async function startCapture(streamId, language = 'en', key) {
   };
 }
 
-function startAudioPipeline() {
+async function startAudioPipeline() {
   audioContext = new AudioContext({ sampleRate: 16000 });
   const source = audioContext.createMediaStreamSource(mediaStream);
 
   // reconnect so user still hears video
   source.connect(audioContext.destination);
 
-  processor = audioContext.createScriptProcessor(4096, 1, 1);
-  processor.onaudioprocess = (e) => {
+  // AudioWorklet replaces the deprecated ScriptProcessorNode.
+  // float32→int16 conversion happens on the audio thread (pcm-worklet.js).
+  await audioContext.audioWorklet.addModule('pcm-worklet.js');
+
+  processor = new AudioWorkletNode(audioContext, 'pcm-capture', {
+    numberOfInputs: 1,
+    numberOfOutputs: 1,
+    channelCount: 1,
+  });
+
+  processor.port.onmessage = (e) => {
     if (socket?.readyState !== WebSocket.OPEN) return;
-
-    const float32 = e.inputBuffer.getChannelData(0);
-
-    // convert float32 to int16 for Deepgram
-    const int16 = new Int16Array(float32.length);
-    for (let i = 0; i < float32.length; i++) {
-      int16[i] = Math.max(-32768, Math.min(32767, float32[i] * 32768));
-    }
-
-    socket.send(int16.buffer);
+    socket.send(e.data); // already an int16 ArrayBuffer
   };
 
   source.connect(processor);
+  // keep the node in the rendering graph so it gets pulled; its output is silent
   processor.connect(audioContext.destination);
-  console.log('[offscreen] audio pipeline started');
+  console.log('[offscreen] audio pipeline started (AudioWorklet)');
 }
 
 function stopCapture() {

@@ -42,6 +42,8 @@ For each claim, evaluate it using your own knowledge and output a JSON array of 
 - "confidence": one of "HIGH", "MEDIUM", "LOW"
 - "explanation": 1-2 sentence justification with the key facts
 - "speaker": name of who made the claim, or "Unknown" — NEVER "Speaker N"
+- "speaker_confidence": one of "HIGH", "MEDIUM", "LOW" — how much conviction the speaker shows while making the claim, judged from their phrasing (hedging like "I think"/"maybe" = LOW; flat assertions = MEDIUM; emphatic certainty like "definitely"/"there is no question" = HIGH). Use the lexical analysis when provided.
+- "speaker_confidence_explanation": one short sentence justifying the speaker_confidence rating
 
 Verdict guide:
 - TRUE: accurate as stated
@@ -67,6 +69,8 @@ Re-evaluate the claim against the evidence and output a JSON array containing ON
 - "confidence": one of "HIGH", "MEDIUM", "LOW"
 - "explanation": 1-2 sentences citing the strongest evidence
 - "speaker": name of who made the claim, or "Unknown" — NEVER "Speaker N"
+- "speaker_confidence": one of "HIGH", "MEDIUM", "LOW" — how much conviction the speaker shows while making the claim, judged from their phrasing in the transcript (hedging = LOW, flat assertion = MEDIUM, emphatic certainty = HIGH). Use the lexical analysis when provided.
+- "speaker_confidence_explanation": one short sentence justifying the speaker_confidence rating
 
 Rules:
 - Search snippets are short and lack context: prefer the fast verdict unless the evidence CLEARLY and directly contradicts it. Do not downgrade a TRUE or SUBSTANTIALLY TRUE fast verdict based on ambiguous or partial snippets.
@@ -75,6 +79,16 @@ Rules:
 - If the evidence is irrelevant to the claim, keep the fast verdict with confidence "LOW".
 - Output ONLY the raw JSON array. No markdown, no code fences, no commentary.`;
 
+
+// fallback when the model omits speaker_confidence: derive it from lexical rates
+function deriveSpeakerConfidence(lexical) {
+  const rates = lexical && lexical.rates;
+  if (!rates || !lexical.wordCount) return null;
+  const score = (rates.certainty || 0) - (rates.hedging || 0) - 0.5 * (rates.filler || 0);
+  if (score >= 2)  return 'HIGH';
+  if (score <= -2) return 'LOW';
+  return 'MEDIUM';
+}
 
 const SPEAKER_PARSE_NOISE = new Set(['debate','presidential','vp','vice','2024','2023','2022','2021','2020','2019','2016','surrounded','tonight','live','full','official']);
  
@@ -531,6 +545,7 @@ async function evaluateClaims(contextText, title, lexicalSummary, lexicalSnapsho
           lexical:          lexicalSnapshot,
           dominantSpeakerId,
           speaker:          dominantSpeaker || (r.speaker && !r.speaker.match(/^Speaker\s*\d+$/i) ? r.speaker : null),
+          speaker_confidence: r.speaker_confidence || deriveSpeakerConfidence(lexicalSnapshot),
         })),
       }).catch(() => {});
       console.log('[pipeline] fast verdicts sent:', valid.length, '| speaker:', dominantSpeaker);
@@ -601,7 +616,18 @@ async function groundAndUpdate(contextText, fastResults, title, lexicalSummary, 
         const groundedDowngrades = match.verdict === 'MISLEADING' || match.verdict === 'FALSE';
         const finalVerdict = (fastWasTrue && groundedDowngrades) ? fastResult.verdict : match.verdict;
  
-        return { ...match, verdict: finalVerdict, sources: urls, pending: false, lexical: lexicalSnapshot, speaker: resolvedSpeaker, dominantSpeakerId, _fastClaim: fastResult.claim };
+        return {
+          ...match,
+          verdict: finalVerdict,
+          sources: urls,
+          pending: false,
+          lexical: lexicalSnapshot,
+          speaker: resolvedSpeaker,
+          dominantSpeakerId,
+          speaker_confidence: match.speaker_confidence || fastResult.speaker_confidence || deriveSpeakerConfidence(lexicalSnapshot),
+          speaker_confidence_explanation: match.speaker_confidence_explanation || fastResult.speaker_confidence_explanation || null,
+          _fastClaim: fastResult.claim,
+        };
       } catch (err) {
         console.error('[grounded] error:', fastResult.claim.slice(0, 40), err);
         return null;
