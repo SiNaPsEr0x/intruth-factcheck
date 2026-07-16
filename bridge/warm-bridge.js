@@ -21,13 +21,20 @@
  *
  * The bridge speaks the SAME request/response shape as the Anthropic
  * Messages API, so the extension only has to swap the URL:
- *   IN  : { model, max_tokens, temperature, system, messages:[{role,content}] }
+ *   IN  : { model, max_tokens, temperature, system, messages:[{role,content}], web_search }
  *   OUT : { content: [ { type:"text", text:"..." } ] }
  *   ERR : { error: { message:"..." } }
  *
  *   NOTE: `max_tokens` and `temperature` are accepted but IGNORED — the
  *   `claude -p` CLI does not expose either, so only `model`, `system`, and
  *   the last user message from `messages` are used.
+ *
+ *   WEB SEARCH: set `web_search: true` (or pass an Anthropic-style `tools`
+ *   array containing a web_search tool) to let Claude use its NATIVE
+ *   WebSearch/WebFetch tools during the turn — the same mechanism as typing
+ *   "cerca con internet" in a normal `claude -p` prompt. When off (default)
+ *   those tools are explicitly disallowed so knowledge-only calls stay fast.
+ *   This replaces the old external Serper/SerpAPI search entirely.
  *
  * PREREQUISITES (one time)
  *   1. Install Claude Code and log in once:  claude   (or `claude login`).
@@ -134,7 +141,11 @@ function mapModel(m) {
 // settings. cwd is tmpdir → no project settings either → minimal init.
 // Pass an AbortSignal to kill the child early (e.g. on request timeout) so a
 // slow/hung `claude` process is reaped instead of orphaned.
-function spawnOneShot(model, text, signal) {
+// `opts.webSearch` toggles Claude's native WebSearch/WebFetch tools for this
+// one call: on → allow them (grounded fact verification); off → disallow them
+// (fast, knowledge-only pass). Web search is a BUILT-IN Claude Code tool, not
+// an MCP server, so it still works with the empty --mcp-config below.
+function spawnOneShot(model, text, signal, opts = {}) {
   const args = [
     '-p', text,
     '--model', model,
@@ -144,6 +155,11 @@ function spawnOneShot(model, text, signal) {
                                        // auth (keychain) loads independently → login still works.
     '--strict-mcp-config',
     '--mcp-config', EMPTY_MCP,         // load no MCP servers → fast, clean
+    // Gate the native web tools per request. Enabling them lets Claude search
+    // the internet itself ("cerca con internet") instead of us handing it
+    // pre-fetched Serper snippets; disabling them keeps the fast pass offline.
+    opts.webSearch ? '--allowedTools'    : '--disallowedTools',
+    'WebSearch,WebFetch',
   ];
   return new Promise((resolve, reject) => {
     let child;
@@ -188,14 +204,14 @@ function spawnOneShot(model, text, signal) {
   });
 }
 
-async function runOnce(model, text, signal, retry = 1) {
+async function runOnce(model, text, signal, opts = {}, retry = 1) {
   try {
-    return await spawnOneShot(model, text, signal);
+    return await spawnOneShot(model, text, signal, opts);
   } catch (e) {
     // Don't retry once aborted (timeout) or on an auth failure — both just fail
     // again the same way and waste a round-trip.
     if (retry > 0 && !(signal && signal.aborted) && !looksLikeAuthError((e && e.message) || e)) {
-      return runOnce(model, text, signal, retry - 1);
+      return runOnce(model, text, signal, opts, retry - 1);
     }
     throw e;
   }
@@ -203,12 +219,12 @@ async function runOnce(model, text, signal, retry = 1) {
 
 // Run a one-shot with a hard deadline; on expiry, abort (which kills the child)
 // and surface a clean timeout error instead of a "claude exited" message.
-async function runWithTimeout(model, text, ms) {
+async function runWithTimeout(model, text, ms, opts = {}) {
   const controller = new AbortController();
   let timedOut = false;
   const timer = setTimeout(() => { timedOut = true; controller.abort(); }, ms);
   try {
-    return await runOnce(model, text, controller.signal);
+    return await runOnce(model, text, controller.signal, opts);
   } catch (e) {
     if (timedOut) throw new Error(`request timed out after ${ms}ms`);
     throw e;
@@ -270,10 +286,16 @@ const server = http.createServer((req, res) => {
       // single prompt argument (no separate system channel).
       const text = (system ? system + '\n\n---\n\n' : '') + user;
 
-      const result = await runWithTimeout(model, text, REQ_TIMEOUT);
+      // Enable native web search when asked — either an explicit `web_search`
+      // flag or an Anthropic-style `tools` array carrying a web_search tool.
+      const webSearch = payload.web_search === true ||
+        (Array.isArray(payload.tools) &&
+          payload.tools.some((tl) => /web[_-]?search/i.test((tl && (tl.type || tl.name)) || '')));
+
+      const result = await runWithTimeout(model, text, REQ_TIMEOUT, { webSearch });
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ content: [{ type: 'text', text: result }] }));
-      log(`${model}  ${Date.now() - t0}ms  ${result.length}c`);
+      log(`${model}${webSearch ? ' +web' : ''}  ${Date.now() - t0}ms  ${result.length}c`);
     } catch (e) {
       res.writeHead(200, { 'Content-Type': 'application/json' }); // extension expects 200 + {error}
       res.end(JSON.stringify({ error: { message: String((e && e.message) || e) } }));

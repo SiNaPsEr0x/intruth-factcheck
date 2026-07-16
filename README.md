@@ -73,7 +73,7 @@ Nel popup puoi scegliere il modello Claude — **Haiku** (più veloce/economico)
 
 ### Lingue
 
-16 lingue selezionabili nel popup: `en, es, fr, de, it, pt, nl, hi, ja, zh, ar, ko, ru, pl, sv, tr`. La scelta guida la trascrizione di Whisper, il locale della ricerca web e la lingua in cui vengono scritti affermazioni e spiegazioni. L'interfaccia dell'overlay e l'export sono localizzati in **italiano/inglese** in automatico in base a `navigator.language`.
+16 lingue selezionabili nel popup: `en, es, fr, de, it, pt, nl, hi, ja, zh, ar, ko, ru, pl, sv, tr`. La scelta guida la trascrizione di Whisper e la lingua in cui vengono scritti affermazioni e spiegazioni. L'interfaccia dell'overlay e l'export sono localizzati in **italiano/inglese** in automatico in base a `navigator.language`.
 
 Modelli di trascrizione Whisper selezionabili: **tiny** (più veloce, meno accurato), **base** (bilanciato, consigliato), **small** (più accurato, più pesante). Al primo avvio il modello viene scaricato da HuggingFace e poi resta in cache.
 
@@ -125,9 +125,9 @@ Fornisci tu le tue credenziali: non ho accesso ad esse. La trascrizione avviene 
 - **storage**: salva **localmente** preferenze e configurazione (chiave, modello, lingua, dimensioni/posizione del pannello).
 - **offscreen**: supporta l'elaborazione audio in background e la trascrizione Whisper.
 
-Host permissions: `api.anthropic.com` (API Claude), `google.serper.dev` (ricerca web di supporto), `huggingface.co` / `*.hf.co` (download dei modelli Whisper), Google Fonts, e `127.0.0.1:8787` / `localhost:8787` (bridge locale). La CSP abilita `wasm-unsafe-eval` per il runtime ONNX.
+Host permissions: `api.anthropic.com` (API Claude), `huggingface.co` / `*.hf.co` (download dei modelli Whisper), Google Fonts, e `127.0.0.1:8787` / `localhost:8787` (bridge locale). La CSP abilita `wasm-unsafe-eval` per il runtime ONNX.
 
-> Nota: la ricerca web di supporto (grounding) usa [Serper](https://serper.dev). La chiave (`SERPER_KEY` in `src/background/service-worker-ex.js`) è vuota di default: senza una chiave impostata, la seconda passata di verifica basata sul web non è attiva.
+> Nota: la ricerca web di supporto (grounding) usa la **ricerca web nativa di Claude** — nessun servizio esterno. Con il warm bridge, la seconda passata invoca `claude -p` con lo strumento `WebSearch` abilitato (l'equivalente di scrivere "cerca con internet"); con l'API diretta usa lo strumento server `web_search` di Anthropic. Non serve alcuna chiave Serper/SerpAPI.
 
 ### Limitazioni e avvertenze
 
@@ -211,7 +211,7 @@ In the popup you choose the Claude model — **Haiku** (fastest/cheapest), **Son
 
 ### Languages
 
-16 selectable languages in the popup: `en, es, fr, de, it, pt, nl, hi, ja, zh, ar, ko, ru, pl, sv, tr`. The choice drives Whisper's transcription, the web-search locale, and the language claims/explanations are written in. The overlay UI and export are localized in **English/Italian** automatically based on `navigator.language`.
+16 selectable languages in the popup: `en, es, fr, de, it, pt, nl, hi, ja, zh, ar, ko, ru, pl, sv, tr`. The choice drives Whisper's transcription and the language claims/explanations are written in. The overlay UI and export are localized in **English/Italian** automatically based on `navigator.language`.
 
 Selectable Whisper transcription models: **tiny** (fastest, least accurate), **base** (balanced, recommended), **small** (most accurate, heavier). On first run the model is downloaded from HuggingFace and then cached.
 
@@ -263,9 +263,9 @@ You provide your own credentials — I have no access to them. Transcription hap
 - **storage**: stores preferences and configuration **locally** (key, model, language, panel size/position).
 - **offscreen**: supports background audio processing and Whisper transcription.
 
-Host permissions: `api.anthropic.com` (Claude API), `google.serper.dev` (supporting web search), `huggingface.co` / `*.hf.co` (Whisper model downloads), Google Fonts, and `127.0.0.1:8787` / `localhost:8787` (local bridge). The CSP enables `wasm-unsafe-eval` for the ONNX runtime.
+Host permissions: `api.anthropic.com` (Claude API), `huggingface.co` / `*.hf.co` (Whisper model downloads), Google Fonts, and `127.0.0.1:8787` / `localhost:8787` (local bridge). The CSP enables `wasm-unsafe-eval` for the ONNX runtime.
 
-> Note: supporting web search (grounding) uses [Serper](https://serper.dev). The key (`SERPER_KEY` in `src/background/service-worker-ex.js`) is empty by default: without a key set, the second web-grounded verification pass is inactive.
+> Note: supporting web search (grounding) uses **Claude's native web search** — no external service. With the warm bridge, the second pass invokes `claude -p` with the `WebSearch` tool enabled (the equivalent of typing "search the internet"); with the direct API it uses Anthropic's server-side `web_search` tool. No Serper/SerpAPI key required.
 
 ### Limitations and warnings
 

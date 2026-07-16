@@ -1,6 +1,5 @@
 // service-worker.js
 let ANTHROPIC_KEY = '';
-const SERPER_KEY = '';
 let TRANSCRIPT_LANGUAGE = 'en';
 let WHISPER_MODEL = 'base';   // on-device Whisper size: 'tiny' | 'base' | 'small'
 
@@ -59,24 +58,27 @@ Rules:
 - If there are no checkable claims, output exactly: []`;
 
 
-const GROUNDED_PROMPT = `You are a fact-checker performing a second-pass verification of a single claim using web search evidence.
+const GROUNDED_PROMPT = `You are a fact-checker performing a second-pass verification of a single claim, using your native web search tool.
 
-You receive: the transcript context, the claim, a preliminary "fast" verdict made without web access, and web search evidence (direct answers, knowledge panels, and numbered snippets).
+You receive: the transcript context, the claim, and a preliminary "fast" verdict made without web access.
 
-Re-evaluate the claim against the evidence and output a JSON array containing ONE object with EXACTLY these fields:
+FIRST, search the internet ("cerca con internet") with the WebSearch tool to gather current evidence for the claim — run one or more targeted queries and, if a result is decisive, open the page with WebFetch to confirm. Base your final verdict on the pages you actually read, not on the fast verdict alone.
+
+THEN output a JSON array containing ONE object with EXACTLY these fields:
 - "claim": the claim, restated concisely (max ~25 words)
 - "verdict": one of "TRUE", "SUBSTANTIALLY TRUE", "FALSE", "MISLEADING", "UNVERIFIABLE"
 - "confidence": one of "HIGH", "MEDIUM", "LOW"
-- "explanation": 1-2 sentences citing the strongest evidence
+- "explanation": 1-2 sentences citing the strongest evidence you found
+- "sources": array of the actual result URLs you relied on (most relevant first, max 3). Use [] if you found nothing usable. Do NOT include social media, forums, or partisan advocacy sites.
 - "speaker": name of who made the claim, or "Unknown" — NEVER "Speaker N"
 - "speaker_confidence": one of "HIGH", "MEDIUM", "LOW" — how much conviction the speaker shows while making the claim, judged from their phrasing in the transcript (hedging = LOW, flat assertion = MEDIUM, emphatic certainty = HIGH). Use the lexical analysis when provided.
 - "speaker_confidence_explanation": one short sentence justifying the speaker_confidence rating
 
 Rules:
-- Search snippets are short and lack context: prefer the fast verdict unless the evidence CLEARLY and directly contradicts it. Do not downgrade a TRUE or SUBSTANTIALLY TRUE fast verdict based on ambiguous or partial snippets.
+- Prefer the fast verdict unless the evidence CLEARLY and directly contradicts it. Do not downgrade a TRUE or SUBSTANTIALLY TRUE fast verdict based on ambiguous or partial results.
 - Use the evidence primarily to confirm, refine confidence, or upgrade an uncertain verdict.
 - Evaluate the claim as of the recording date when provided; ignore evidence about later events.
-- If the evidence is irrelevant to the claim, keep the fast verdict with confidence "LOW".
+- If the search returns nothing relevant, keep the fast verdict with confidence "LOW" and "sources": [].
 - Output ONLY the raw JSON array. No markdown, no code fences, no commentary.`;
 
 
@@ -131,6 +133,9 @@ function parseSpeakersFromTitle(title) {
 }
  
  
+// Low-quality / partisan domains to strip from the sources Claude returns.
+// The grounded prompt already tells Claude to avoid these; this is a
+// defensive post-filter so a stray URL never reaches the overlay.
 const BLOCKED_DOMAINS = [
   'reddit.com', 'facebook.com', 'twitter.com', 'x.com',
   'tiktok.com', 'instagram.com', 'pinterest.com', 'quora.com',
@@ -143,72 +148,34 @@ const BLOCKED_DOMAINS = [
   'bostonkravmaga.com',
   'israelpolicyforum.org',
 ];
- 
-const LANGUAGE_LOCALE = {
-  en: { gl: 'us', hl: 'en' },
-  es: { gl: 'es', hl: 'es' },
-  fr: { gl: 'fr', hl: 'fr' },
-  de: { gl: 'de', hl: 'de' },
-  it: { gl: 'it', hl: 'it' },
-  pt: { gl: 'br', hl: 'pt' },
-  nl: { gl: 'nl', hl: 'nl' },
-  hi: { gl: 'in', hl: 'hi' },
-  ja: { gl: 'jp', hl: 'ja' },
-  zh: { gl: 'cn', hl: 'zh-cn' },
-  ar: { gl: 'sa', hl: 'ar' },
-  ko: { gl: 'kr', hl: 'ko' },
-  ru: { gl: 'ru', hl: 'ru' },
-  pl: { gl: 'pl', hl: 'pl' },
-  sv: { gl: 'se', hl: 'sv' },
-  tr: { gl: 'tr', hl: 'tr' },
-};
 
-async function searchWeb(query, retries = 2) {
-  try {
-    const res = await fetch('https://google.serper.dev/search', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-API-KEY': SERPER_KEY },
-      body: JSON.stringify({ q: query, num: 6, ...(LANGUAGE_LOCALE[TRANSCRIPT_LANGUAGE] || LANGUAGE_LOCALE.en) }),
-    });
-    const data = await res.json();
- 
-    const organic = (data.organic ?? [])
-      .filter(r => r.link && !BLOCKED_DOMAINS.some(d => r.link.includes(d)))
-      .slice(0, 3)
-      .map(r => ({ url: r.link, title: r.title || '', snippet: r.snippet || '', date: r.date || '' }));
- 
-    // answerBox — Google's direct factual answer, highest quality signal
-    const answerBox = data.answerBox
-      ? {
-          answer: data.answerBox.answer || data.answerBox.snippet || '',
-          title:  data.answerBox.title  || '',
-          url:    data.answerBox.link   || '',
-        }
-      : null;
- 
-    // knowledgeGraph — structured entity data
-    const knowledgeGraph = data.knowledgeGraph
-      ? {
-          description: data.knowledgeGraph.description || '',
-          title:       data.knowledgeGraph.title       || '',
-        }
-      : null;
- 
-    return { organic, answerBox, knowledgeGraph };
-  } catch (err) {
-    if (retries > 0) {
-      await new Promise(r => setTimeout(r, 500));
-      return searchWeb(query, retries - 1);
-    }
-    console.error('[serper] error:', err);
-    return { organic: [], answerBox: null, knowledgeGraph: null };
+// Sanitize the "sources" array Claude returns from its native web search:
+// keep only real http(s) URLs, drop blocked domains, cap at 3.
+function cleanSources(sources) {
+  if (!Array.isArray(sources)) return [];
+  const seen = new Set();
+  const out = [];
+  for (const s of sources) {
+    const url = typeof s === 'string' ? s.trim() : (s && s.url ? String(s.url).trim() : '');
+    if (!/^https?:\/\//i.test(url)) continue;
+    if (BLOCKED_DOMAINS.some(d => url.includes(d))) continue;
+    if (seen.has(url)) continue;
+    seen.add(url);
+    out.push(url);
+    if (out.length >= 3) break;
   }
+  return out;
 }
 
- 
+
 // ── Claude ────────────────────────────────────────────────────────────────────
  
-async function callClaude(userMessage, systemPrompt) {
+// `webSearch` lets Claude use its NATIVE web search to ground the answer:
+//   • bridge  → send `web_search: true`; the bridge spawns `claude -p` with the
+//               WebSearch/WebFetch tools allowed ("cerca con internet").
+//   • direct  → attach the Anthropic `web_search` server tool.
+// This replaces the old external Serper call entirely.
+async function callClaude(userMessage, systemPrompt, webSearch = false) {
   const alias = SELECTED_MODEL || 'haiku';
   const url = USE_BRIDGE ? BRIDGE_URL : 'https://api.anthropic.com/v1/messages';
   // Bridge understands aliases directly; the direct API wants a concrete model id.
@@ -221,19 +188,24 @@ async function callClaude(userMessage, systemPrompt) {
     headers['anthropic-dangerous-direct-browser-access'] = 'true';
   }
 
+  const body = {
+    model,
+    max_tokens: 768,
+    temperature: 0,
+    system: systemPrompt,
+    messages: [{ role: 'user', content: userMessage }],
+  };
+  if (webSearch) {
+    if (USE_BRIDGE) {
+      body.web_search = true;              // bridge flag → native `claude -p` web tools
+    } else {
+      body.tools = [{ type: 'web_search_20250305', name: 'web_search', max_uses: 3 }];
+    }
+  }
+
   let res;
   try {
-    res = await fetch(url, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        model,
-        max_tokens: 768,
-        temperature: 0,
-        system: systemPrompt,
-        messages: [{ role: 'user', content: userMessage }],
-      }),
-    });
+    res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) });
   } catch (e) {
     const msg = USE_BRIDGE
       ? `Local bridge unreachable at ${url} — is warm-bridge.js running?`
@@ -250,7 +222,11 @@ async function callClaude(userMessage, systemPrompt) {
     if (activeTabId) chrome.tabs.sendMessage(activeTabId, { type: 'PIPELINE_ERROR', message: msg }).catch(() => {});
     return '';
   }
-  const raw = data.content?.[0]?.text?.trim() || '';
+  // With web search the direct API returns multiple content blocks (tool use +
+  // results + text); concatenate every text block so we don't miss the answer.
+  const raw = Array.isArray(data.content)
+    ? data.content.filter(b => b && b.type === 'text').map(b => b.text || '').join('').trim()
+    : (data.content?.[0]?.text?.trim() || '');
   return raw.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
 }
  
@@ -522,19 +498,16 @@ async function evaluateClaims(contextText, title, lexicalSummary, lexicalSnapsho
       ? `\n\nClaims already fact-checked this session — do NOT re-evaluate these or close variants:\n- ${checkedList}\n`
       : '';
  
-    // fast Claude call — Serper searches fire immediately after on the returned claims
+    // fast Claude call — knowledge-only, no web (web tools stay off here for speed)
     const raw     = await callClaude(
       `${titleContext}Transcript: "${contextText}"${alreadyChecked}${lexicalContext}`,
       EVALUATE_PROMPT
     );
     const results = parseArray(raw);
     const valid   = results.filter(r => r.claim && r.verdict && r.verdict !== 'UNVERIFIABLE' && !isDuplicate(r.claim));
- 
+
     if (!valid.length) return;
- 
-    // kick off per-claim Serper searches in parallel with sending fast cards to overlay
-    const claimSearchPromises = valid.map(r => searchWeb(r.claim));
- 
+
     if (activeTabId) {
       chrome.tabs.sendMessage(activeTabId, {
         type: 'NEW_VERDICT',
@@ -551,75 +524,59 @@ async function evaluateClaims(contextText, title, lexicalSummary, lexicalSnapsho
       console.log('[pipeline] fast verdicts sent:', valid.length, '| speaker:', dominantSpeaker);
     }
  
-    groundAndUpdate(contextText, valid, title, lexicalSummary, lexicalSnapshot, dominantSpeaker, dominantSpeakerId, claimSearchPromises);
- 
+    groundAndUpdate(contextText, valid, title, lexicalSummary, lexicalSnapshot, dominantSpeaker, dominantSpeakerId);
+
   } catch (err) {
     console.error('[pipeline] error:', err);
   }
 }
  
-async function groundAndUpdate(contextText, fastResults, title, lexicalSummary, lexicalSnapshot, dominantSpeaker, dominantSpeakerId, claimSearchPromises = null) {
+async function groundAndUpdate(contextText, fastResults, title, lexicalSummary, lexicalSnapshot, dominantSpeaker, dominantSpeakerId) {
   try {
     const dateCtx      = pageDate ? `\nDate: ${pageDate}` : '';
     const languageInstruction = TRANSCRIPT_LANGUAGE && TRANSCRIPT_LANGUAGE !== 'en'
       ? `\nLANGUAGE REQUIREMENT: You MUST write the "claim" and "explanation" fields in ${TRANSCRIPT_LANGUAGE}. This is mandatory regardless of what language your sources are in. Only the verdict values (TRUE, FALSE, etc) stay in English.`
       : '';
- 
+
     const titleContext = title
       ? `Video: "${title}"${dateCtx}\nEvaluate claims as they were made at the time of this recording. Web search results may include articles published after the debate date — ignore any information that was not publicly known at the time of the debate.${languageInstruction}\n\n`
       : languageInstruction ? `${languageInstruction}\n\n` : '';
     const lexicalContext = lexicalSummary ? `\n\nLexical analysis: ${lexicalSummary}` : '';
- 
-    const groundedAll = await Promise.all(fastResults.map(async (fastResult, i) => {
+
+    const groundedAll = await Promise.all(fastResults.map(async (fastResult) => {
       try {
-        const searchData = claimSearchPromises
-          ? await claimSearchPromises[i]
-          : await searchWeb(fastResult.claim);
-        if (!searchData.organic?.length && !searchData.answerBox && !searchData.knowledgeGraph) {
-          // no search results — finalize with fast verdict so card doesn't hang as pending
-          const resolvedSpeaker = dominantSpeaker || (fastResult.speaker && !fastResult.speaker.match(/^Speaker\s*\d+$/i) ? fastResult.speaker : null);
-          return { ...fastResult, sources: [], pending: false, lexical: lexicalSnapshot, speaker: resolvedSpeaker, dominantSpeakerId, _fastClaim: fastResult.claim };
-        }
- 
-        const urls = searchData.organic.map(r => r.url);
- 
-        // build evidence block — answerBox first (highest quality), then knowledgeGraph, then organic
-        const parts = [];
-        if (searchData.answerBox?.answer) {
-          parts.push(`[Direct Answer] ${searchData.answerBox.title ? searchData.answerBox.title + ': ' : ''}${searchData.answerBox.answer}${searchData.answerBox.url ? '\n' + searchData.answerBox.url : ''}`);
-        }
-        if (searchData.knowledgeGraph?.description) {
-          parts.push(`[Knowledge Panel] ${searchData.knowledgeGraph.title ? searchData.knowledgeGraph.title + ': ' : ''}${searchData.knowledgeGraph.description}`);
-        }
-        searchData.organic.forEach((r, idx) => {
-          const datePart = r.date ? ` (${r.date})` : '';
-          parts.push(`[${idx+1}] ${r.title}${datePart}\n${r.url}\n${r.snippet}`);
-        });
-        const evidenceBlock = parts.join('\n\n');
+        // Grounded pass: Claude searches the internet itself with its native
+        // web tools (webSearch = true) — no pre-fetched evidence handed in.
         const raw = await callClaude(
-          `${titleContext}Transcript: "${contextText}"\n\nClaim: "${fastResult.claim}"\nFast verdict: ${fastResult.verdict}\n\nWeb search evidence:\n${evidenceBlock}${lexicalContext}`,
-          GROUNDED_PROMPT
+          `${titleContext}Transcript: "${contextText}"\n\nClaim to verify: "${fastResult.claim}"\nPreliminary (no-web) verdict: ${fastResult.verdict}\n\nSearch the internet now to verify this claim, then return the JSON.${lexicalContext}`,
+          GROUNDED_PROMPT,
+          true
         );
         const parsed = parseArray(raw);
         const match  = parsed.find(r => r.claim && r.verdict);
+        if (!match) {
+          // search/parse failed — finalize with the fast verdict so the card
+          // doesn't hang as pending forever.
+          const resolvedSpeaker = dominantSpeaker || (fastResult.speaker && !fastResult.speaker.match(/^Speaker\s*\d+$/i) ? fastResult.speaker : null);
+          return { ...fastResult, sources: [], pending: false, lexical: lexicalSnapshot, speaker: resolvedSpeaker, dominantSpeakerId, _fastClaim: fastResult.claim };
+        }
         // drop UNVERIFIABLE from grounded pass — either it's checkable or it isn't shown
-        if (!match || match.verdict === 'UNVERIFIABLE') return null;
+        if (match.verdict === 'UNVERIFIABLE') return null;
         const resolvedSpeaker = dominantSpeaker
           || (fastResult.speaker && !fastResult.speaker.match(/^Speaker\s*\d+$/i) ? fastResult.speaker : null)
           || (match.speaker && !match.speaker.match(/^Speaker\s*\d+$/i) ? match.speaker : null);
- 
-        // code-level protection: never downgrade TRUE/SUBSTANTIALLY TRUE to MISLEADING or FALSE
-        // the grounded prompt repeatedly violates this rule by reasoning from snippets
-        // fast pass has full training knowledge; grounded pass has 1-2 sentence snippets
-        // only the grounded pass can upgrade verdicts or add SUBSTANTIALLY TRUE context
+
+        // code-level protection: never downgrade TRUE/SUBSTANTIALLY TRUE to MISLEADING or FALSE.
+        // The fast pass has full training knowledge; the grounded pass may over-index on a
+        // single search result. Only allow the grounded pass to upgrade or refine verdicts.
         const fastWasTrue = fastResult.verdict === 'TRUE' || fastResult.verdict === 'SUBSTANTIALLY TRUE';
         const groundedDowngrades = match.verdict === 'MISLEADING' || match.verdict === 'FALSE';
         const finalVerdict = (fastWasTrue && groundedDowngrades) ? fastResult.verdict : match.verdict;
- 
+
         return {
           ...match,
           verdict: finalVerdict,
-          sources: urls,
+          sources: cleanSources(match.sources),
           pending: false,
           lexical: lexicalSnapshot,
           speaker: resolvedSpeaker,
