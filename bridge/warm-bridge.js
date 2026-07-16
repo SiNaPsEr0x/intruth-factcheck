@@ -1,25 +1,33 @@
 #!/usr/bin/env node
 /*
- * InTruth — Warm Bridge for Claude Code
+ * InTruth — Local Claude Bridge for Claude Code
  * ------------------------------------------------------------------
  * A tiny local HTTP server that lets the InTruth browser extension use
  * your Claude *subscription* (via the Claude Code CLI) instead of a paid
  * API key.
  *
  * HOW IT WORKS
- *   Extension  ──POST──▶  this bridge  ──stdin/stdout──▶  claude (CLI)  ──▶  subscription
+ *   Extension  ──POST──▶  this bridge  ──▶  claude -p (CLI)  ──▶  subscription
  *
- * "Warm" = the bridge keeps a small pool of Claude Code processes already
- * spun up and initialized (auth loaded, config parsed, MCP skipped), so the
- * ONLY latency on the request path is the model's own inference — not the
- * ~1-2s cold start of the CLI. Each warm process is used for exactly one
- * request (fresh, independent context) and then replaced by a new spare.
+ * Each incoming request spawns its own short-lived `claude -p` process
+ * (a "one-shot" invocation with a fresh, independent context) and returns
+ * that process's reply. Requests are independent and can run in parallel.
+ *
+ * (Historical note: an earlier version kept a warm *pool* of persistent
+ * Claude Code processes to shave the CLI's cold-start latency. That design
+ * was dropped because the pooled stream-json session hangs on a
+ * claude-mem `SessionStart` hook that never completes in a persistent
+ * process. The one-shot path below is what actually runs.)
  *
  * The bridge speaks the SAME request/response shape as the Anthropic
  * Messages API, so the extension only has to swap the URL:
  *   IN  : { model, max_tokens, temperature, system, messages:[{role,content}] }
  *   OUT : { content: [ { type:"text", text:"..." } ] }
  *   ERR : { error: { message:"..." } }
+ *
+ *   NOTE: `max_tokens` and `temperature` are accepted but IGNORED — the
+ *   `claude -p` CLI does not expose either, so only `model`, `system`, and
+ *   the last user message from `messages` are used.
  *
  * PREREQUISITES (one time)
  *   1. Install Claude Code and log in once:  claude   (or `claude login`).
@@ -31,9 +39,9 @@
  * ENV OVERRIDES (all optional)
  *   BRIDGE_PORT   default 8787
  *   BRIDGE_HOST   default 127.0.0.1
- *   CLAUDE_BIN    default "claude" ("claude.cmd" resolved automatically on win)
- *   POOL_SIZE     default 2   (warm spares kept ready per model)
+ *   CLAUDE_BIN    default "claude" ("claude.exe" resolved automatically on win)
  *   REQ_TIMEOUT   default 120000 (ms)
+ *   VERIFY_TIMEOUT default 90000 (ms, startup self-check only)
  *
  * NOTE: This is a personal / dev tool. It is NOT distributable to other
  * users (they would each need Claude Code + the bridge on their own PC).
@@ -50,11 +58,9 @@ const { spawn } = require('child_process');
 // ── Config ──────────────────────────────────────────────────────────────────
 const PORT = parseInt(process.env.BRIDGE_PORT || '8787', 10);
 const HOST = process.env.BRIDGE_HOST || '127.0.0.1';
-const POOL_SIZE = parseInt(process.env.POOL_SIZE || '2', 10);
 const REQ_TIMEOUT = parseInt(process.env.REQ_TIMEOUT || '120000', 10);
 // Startup self-check budget. Must comfortably exceed a cold `claude` launch:
-// a single cold round-trip is ~11s, but at boot the pool spawns POOL_SIZE procs
-// at once, so under CPU/disk contention the first verify can take much longer.
+// the first invocation after boot can be slow under CPU/disk contention.
 // This is only the self-check — real requests use REQ_TIMEOUT.
 const VERIFY_TIMEOUT = parseInt(process.env.VERIFY_TIMEOUT || '90000', 10);
 const IS_WIN = process.platform === 'win32';
@@ -83,13 +89,19 @@ const NEEDS_SHELL = IS_WIN && (_binExt === '.cmd' || _binExt === '.bat');
 const WORKDIR = os.tmpdir(); // run outside any project → no CLAUDE.md / project MCP
 
 // No token management here: `claude` is already logged in on this machine and
-// reads its own stored subscription credentials. The pooled processes inherit
+// reads its own stored subscription credentials. The spawned processes inherit
 // env: process.env, so they authenticate exactly like `claude` in a terminal.
 
 // Empty MCP config so --strict-mcp-config loads *nothing* (faster init, no plugins).
 // Must include an (empty) "mcpServers" record — claude rejects a bare "{}".
 const EMPTY_MCP = path.join(os.tmpdir(), 'intruth-empty-mcp.json');
-try { fs.writeFileSync(EMPTY_MCP, '{"mcpServers":{}}'); } catch (_) {}
+try {
+  fs.writeFileSync(EMPTY_MCP, '{"mcpServers":{}}');
+} catch (e) {
+  // Surface loudly: without this file every request fails with an opaque
+  // "--mcp-config: no such file" from claude instead of a clear cause here.
+  log(`⚠ could not write empty MCP config at ${EMPTY_MCP}: ${(e && e.message) || e}`);
+}
 
 // Track every temp file we create so it gets removed when node exits.
 // (WORKDIR is the OS temp *dir* used as cwd — never delete that, only our files.)
@@ -114,120 +126,15 @@ function mapModel(m) {
   return 'haiku';
 }
 
-// ── Warm process ──────────────────────────────────────────────────────────────
-function spawnWarm(model) {
-  const args = [
-    '-p',
-    '--model', model,
-    '--input-format', 'stream-json',
-    '--output-format', 'stream-json',
-    '--verbose',                       // required by stream-json output in print mode
-    '--dangerously-skip-permissions',  // non-interactive: never prompt
-    '--strict-mcp-config',
-    '--mcp-config', EMPTY_MCP,          // load no MCP servers → fast, clean
-  ];
-
-  const child = spawn(CLAUDE_BIN, args, {
-    cwd: WORKDIR,
-    stdio: ['pipe', 'pipe', 'pipe'],
-    shell: NEEDS_SHELL,   // only .cmd/.bat shims need a shell; .exe spawns directly
-    env: process.env,
-  });
-
-  const proc = { child, model, dead: false, pending: null };
-  proc.ready = new Promise((resolve, reject) => {
-    proc._resolveReady = resolve;
-    proc._rejectReady = reject;
-  });
-
-  let buf = '';
-  child.stdout.on('data', (chunk) => {
-    buf += chunk.toString('utf8');
-    let nl;
-    while ((nl = buf.indexOf('\n')) >= 0) {
-      const line = buf.slice(0, nl).trim();
-      buf = buf.slice(nl + 1);
-      if (!line) continue;
-      let ev;
-      try { ev = JSON.parse(line); } catch (_) { continue; }
-      if (ev.type === 'system' && ev.subtype === 'init') {
-        proc._resolveReady();
-      } else if (ev.type === 'result') {
-        if (proc.pending) {
-          const p = proc.pending; proc.pending = null;
-          if (ev.is_error) p.reject(new Error(ev.result || ev.error || 'claude error'));
-          else p.resolve(String(ev.result != null ? ev.result : ''));
-        }
-      }
-    }
-  });
-
-  let stderr = '';
-  child.stderr.on('data', (d) => { stderr += d.toString('utf8'); if (stderr.length > 4000) stderr = stderr.slice(-4000); });
-
-  const fail = (err) => {
-    proc.dead = true;
-    proc._rejectReady(err);
-    if (proc.pending) { const p = proc.pending; proc.pending = null; p.reject(err); }
-  };
-  child.on('exit', (code) => {
-    if (code === 0 && !proc.pending) { proc.dead = true; return; }
-    fail(new Error(`claude exited (code ${code}). ${stderr.slice(-600)}`));
-  });
-  child.on('error', (err) => {
-    fail(new Error(`failed to launch "${CLAUDE_BIN}": ${err.message}. Is Claude Code installed and on PATH?`));
-  });
-
-  return proc;
-}
-
-// Send one user turn, read one result, then let the process exit (single use).
-function ask(proc, text) {
-  return new Promise((resolve, reject) => {
-    proc.pending = { resolve, reject };
-    const msg = JSON.stringify({ type: 'user', message: { role: 'user', content: text } }) + '\n';
-    try {
-      proc.child.stdin.write(msg);
-      proc.child.stdin.end(); // no more turns → claude answers then exits
-    } catch (e) {
-      proc.pending = null;
-      reject(e);
-    }
-  });
-}
-
-// ── Warm pool ──────────────────────────────────────────────────────────────────
-const pools = Object.create(null); // model → [proc,...]
-
-function ensurePool(model) {
-  const arr = (pools[model] = pools[model] || []);
-  while (arr.length < POOL_SIZE) {
-    const proc = spawnWarm(model);
-    arr.push(proc);
-    proc.ready.catch(() => {
-      const i = arr.indexOf(proc);
-      if (i >= 0) arr.splice(i, 1);
-    });
-  }
-}
-
-async function getWarm(model) {
-  ensurePool(model);
-  const arr = pools[model];
-  const proc = arr.shift();     // take a spare (synchronous, atomic)
-  ensurePool(model);            // refill in the background
-  await proc.ready;             // usually already initialized
-  return proc;
-}
-
 // ── One-shot invocation ─────────────────────────────────────────────────────
 // Each request spawns its own short-lived `claude -p` (no persistent session).
-// This SUPERSEDES the warm pool above: the pooled stream-json session hangs on
-// the claude-mem `SessionStart` hook, which never completes in a persistent
-// process. `--setting-sources project` skips USER settings (where enabledPlugins
-// lives) so that hook never loads — while auth still comes from the keychain,
-// which is read independently of settings. Run many of these in parallel.
-function spawnOneShot(model, text) {
+// `--setting-sources project` skips USER settings (where enabledPlugins lives)
+// so the claude-mem `SessionStart` hook — which hangs a persistent session —
+// never loads; auth still comes from the keychain, read independently of
+// settings. cwd is tmpdir → no project settings either → minimal init.
+// Pass an AbortSignal to kill the child early (e.g. on request timeout) so a
+// slow/hung `claude` process is reaped instead of orphaned.
+function spawnOneShot(model, text, signal) {
   const args = [
     '-p', text,
     '--model', model,
@@ -235,7 +142,6 @@ function spawnOneShot(model, text) {
     '--dangerously-skip-permissions', // non-interactive: never prompt
     '--setting-sources', 'project',   // skip user settings → no claude-mem hook (it hangs);
                                        // auth (keychain) loads independently → login still works.
-                                       // cwd is tmpdir → no project settings either → minimal init.
     '--strict-mcp-config',
     '--mcp-config', EMPTY_MCP,         // load no MCP servers → fast, clean
   ];
@@ -249,6 +155,18 @@ function spawnOneShot(model, text) {
         env: process.env,     // inherit stored subscription credentials
       });
     } catch (e) { return reject(e); }
+
+    // Kill the child if the caller aborts (timeout). 'exit' still fires after a
+    // kill, so the normal exit handler settles the promise.
+    const onAbort = () => { try { child.kill('SIGKILL'); } catch (_) {} };
+    if (signal) {
+      if (signal.aborted) onAbort();
+      else signal.addEventListener('abort', onAbort, { once: true });
+    }
+    const cleanupSignal = () => {
+      if (signal) { try { signal.removeEventListener('abort', onAbort); } catch (_) {} }
+    };
+
     let stdout = '', stderr = '';
     try { child.stdin.end(); } catch (_) {}  // empty stdin + EOF → prompt comes from -p, no hang
     child.stdout.on('data', (c) => { stdout += c.toString('utf8'); });
@@ -256,8 +174,9 @@ function spawnOneShot(model, text) {
       stderr += c.toString('utf8');
       if (stderr.length > 4000) stderr = stderr.slice(-4000);
     });
-    child.on('error', reject);
+    child.on('error', (e) => { cleanupSignal(); reject(e); });
     child.on('exit', (code) => {
+      cleanupSignal();
       let parsed = null;
       try { parsed = JSON.parse(stdout); } catch (_) {}
       if (parsed && parsed.is_error === false && typeof parsed.result === 'string') {
@@ -269,24 +188,33 @@ function spawnOneShot(model, text) {
   });
 }
 
-async function runOnce(model, text, retry = 1) {
+async function runOnce(model, text, signal, retry = 1) {
   try {
-    return await spawnOneShot(model, text);
+    return await spawnOneShot(model, text, signal);
   } catch (e) {
-    // Retrying an auth failure just fails again the same way — don't waste a round-trip.
-    if (retry > 0 && !looksLikeAuthError((e && e.message) || e)) {
-      return runOnce(model, text, retry - 1);
+    // Don't retry once aborted (timeout) or on an auth failure — both just fail
+    // again the same way and waste a round-trip.
+    if (retry > 0 && !(signal && signal.aborted) && !looksLikeAuthError((e && e.message) || e)) {
+      return runOnce(model, text, signal, retry - 1);
     }
     throw e;
   }
 }
 
-function withTimeout(promise, ms) {
-  return new Promise((resolve, reject) => {
-    const t = setTimeout(() => reject(new Error(`request timed out after ${ms}ms`)), ms);
-    promise.then((v) => { clearTimeout(t); resolve(v); },
-                 (e) => { clearTimeout(t); reject(e); });
-  });
+// Run a one-shot with a hard deadline; on expiry, abort (which kills the child)
+// and surface a clean timeout error instead of a "claude exited" message.
+async function runWithTimeout(model, text, ms) {
+  const controller = new AbortController();
+  let timedOut = false;
+  const timer = setTimeout(() => { timedOut = true; controller.abort(); }, ms);
+  try {
+    return await runOnce(model, text, controller.signal);
+  } catch (e) {
+    if (timedOut) throw new Error(`request timed out after ${ms}ms`);
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 // Extract the user text from an Anthropic-style messages array.
@@ -301,6 +229,8 @@ function extractUser(messages) {
 }
 
 // ── HTTP server ────────────────────────────────────────────────────────────────
+let inflight = 0; // requests currently being served (reported by /health)
+
 const server = http.createServer((req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Headers', '*');
@@ -309,30 +239,38 @@ const server = http.createServer((req, res) => {
   if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
 
   if (req.method === 'GET' && req.url.startsWith('/health')) {
-    const counts = {};
-    for (const k of Object.keys(pools)) counts[k] = pools[k].length;
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ ok: true, warm: counts }));
+    res.end(JSON.stringify({ ok: true, mode: 'one-shot', inflight }));
     return;
   }
 
   if (req.method !== 'POST') { res.writeHead(404); res.end('not found'); return; }
 
   let body = '';
-  req.on('data', (c) => { body += c; if (body.length > 5e6) req.destroy(); });
+  let tooLarge = false;
+  req.on('data', (c) => {
+    body += c;
+    if (body.length > 5e6 && !tooLarge) {
+      tooLarge = true;
+      res.writeHead(413, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: { message: 'request body too large' } }));
+      req.destroy();
+    }
+  });
   req.on('end', async () => {
+    if (tooLarge) return; // already responded
     const t0 = Date.now();
+    inflight++;
     try {
       const payload = JSON.parse(body || '{}');
       const model = mapModel(payload.model);
       const system = payload.system || '';
       const user = extractUser(payload.messages);
-      // System prompt is folded into the turn because the warm pool is generic
-      // (per-request system prompts can't be pre-bound to a pooled process).
+      // System prompt is folded into the user turn because `claude -p` takes a
+      // single prompt argument (no separate system channel).
       const text = (system ? system + '\n\n---\n\n' : '') + user;
 
-      const result = await withTimeout(runOnce(model, text), REQ_TIMEOUT);
-      // Strip code fences the same way the extension does downstream (harmless).
+      const result = await runWithTimeout(model, text, REQ_TIMEOUT);
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ content: [{ type: 'text', text: result }] }));
       log(`${model}  ${Date.now() - t0}ms  ${result.length}c`);
@@ -340,6 +278,8 @@ const server = http.createServer((req, res) => {
       res.writeHead(200, { 'Content-Type': 'application/json' }); // extension expects 200 + {error}
       res.end(JSON.stringify({ error: { message: String((e && e.message) || e) } }));
       log(`ERROR  ${Date.now() - t0}ms  ${(e && e.message) || e}`);
+    } finally {
+      inflight--;
     }
   });
 });
@@ -350,18 +290,16 @@ function log(msg) {
 }
 
 // ── Startup / self-check ──────────────────────────────────────────────────────
-const SCRIPT = path.relative(process.cwd(), __filename) || __filename;
-
 function looksLikeAuthError(m) {
   return /401|403|unauthor|forbidden|expired|invalid[_\s-]*token|token[_\s-]*invalid|authenticat|not\s+logged|setup-token|api[_\s-]*key|oauth|credential/i
     .test(String(m || ''));
 }
 
-// One tiny real round-trip through the pool to confirm auth actually works.
+// One tiny real round-trip to confirm auth actually works.
 async function bootstrap() {
   log('Verifying Claude authentication…');
   try {
-    const reply = await withTimeout(runOnce('haiku', 'Reply with exactly: OK'), VERIFY_TIMEOUT);
+    const reply = await runWithTimeout('haiku', 'Reply with exactly: OK', VERIFY_TIMEOUT);
     log(`✓ Auth OK — Claude replied "${reply.trim().slice(0, 20)}". Ready.`);
   } catch (e) {
     const m = (e && e.message) || String(e);
@@ -382,7 +320,7 @@ async function bootstrap() {
 const [CMD] = process.argv.slice(2);
 
 if (CMD === 'check' || CMD === 'verify') {
-  withTimeout(runOnce('haiku', 'Reply with exactly: OK'), VERIFY_TIMEOUT)
+  runWithTimeout('haiku', 'Reply with exactly: OK', VERIFY_TIMEOUT)
     .then((r) => { console.log('✓ Auth OK — Claude replied:', r.trim()); process.exit(0); })
     .catch((e) => {
       console.error('✗ Auth FAILED:', (e && e.message) || e);
@@ -391,7 +329,7 @@ if (CMD === 'check' || CMD === 'verify') {
     });
 } else {
   server.listen(PORT, HOST, () => {
-    log(`InTruth warm bridge listening on http://${HOST}:${PORT}`);
+    log(`InTruth bridge listening on http://${HOST}:${PORT}`);
     log(`claude bin: ${CLAUDE_BIN}   mode: one-shot -p (parallel)   cwd: ${WORKDIR}`);
     bootstrap(); // verify auth works
   });
@@ -399,7 +337,6 @@ if (CMD === 'check' || CMD === 'verify') {
 
 function shutdown(signal) {
   log(`shutting down… (${signal})`);
-  for (const k of Object.keys(pools)) for (const p of pools[k]) { try { p.child.kill(); } catch (_) {} }
   cleanupTempFiles();          // remove temp files before we go
   process.exit(0);
 }
