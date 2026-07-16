@@ -95,6 +95,50 @@ body {
   color: #e8e8e8;
 }
 
+.key-toggle {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+  font-size: 10px;
+  color: #ccc;
+  user-select: none;
+}
+
+.key-toggle input[type="checkbox"] {
+  appearance: none;
+  width: 30px;
+  height: 16px;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.1);
+  border: 0.5px solid rgba(255,255,255,0.15);
+  position: relative;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+
+.key-toggle input[type="checkbox"]::after {
+  content: '';
+  position: absolute;
+  top: 1.5px;
+  left: 1.5px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #888;
+  transition: transform 0.15s, background 0.15s;
+}
+
+.key-toggle input[type="checkbox"]:checked {
+  background: rgba(74, 222, 128, 0.35);
+}
+
+.key-toggle input[type="checkbox"]:checked::after {
+  transform: translateX(14px);
+  background: #4ade80;
+}
+
 .lang-row {
   display: flex;
   align-items: center;
@@ -121,6 +165,12 @@ body {
 
 .key-hint.error { color: #f87171; }
 .key-hint.ok    { color: #4ade80; }
+
+.key-link {
+  color: #60a5fa;
+  text-decoration: none;
+}
+.key-link:hover { text-decoration: underline; }
 
 /* ── Toggle button ── */
 

@@ -1,22 +1,79 @@
 // service-worker.js
 let ANTHROPIC_KEY = '';
+let DEEPGRAM_KEY = '';
 const SERPER_KEY = '';
 let TRANSCRIPT_LANGUAGE = 'en';
 
+// ── Model + routing config ────────────────────────────────────────────────────
+// Alias → Anthropic API model id (used only on the direct-API path).
+const MODEL_IDS = {
+  haiku:  'claude-haiku-4-5-20251001',
+  sonnet: 'claude-sonnet-4-5',   // API accepts the dated snapshot too; adjust if needed
+  opus:   'claude-opus-4-1',
+};
+let SELECTED_MODEL = 'haiku';           // 'haiku' | 'sonnet' | 'opus'
+let USE_BRIDGE = false;                 // true → use local subscription bridge
+let BRIDGE_URL = 'http://127.0.0.1:8787/v1/messages';
+
 async function loadKeys() {
   return new Promise(resolve => {
-    chrome.storage.local.get(['anthropicKey', 'transcriptLanguage'], (data) => {
-      ANTHROPIC_KEY = data.anthropicKey || '';
-      TRANSCRIPT_LANGUAGE = data.transcriptLanguage || 'en';
-      resolve();
-    });
+    chrome.storage.local.get(
+      ['anthropicKey', 'deepgramKey', 'transcriptLanguage', 'selectedModel', 'useBridge', 'bridgeUrl'],
+      (data) => {
+        ANTHROPIC_KEY = data.anthropicKey || '';
+        DEEPGRAM_KEY = data.deepgramKey || '';
+        TRANSCRIPT_LANGUAGE = data.transcriptLanguage || 'en';
+        SELECTED_MODEL = data.selectedModel || 'haiku';
+        USE_BRIDGE = data.useBridge === true;
+        BRIDGE_URL = data.bridgeUrl || 'http://127.0.0.1:8787/v1/messages';
+        resolve();
+      }
+    );
   });
 }
 
-const EVALUATE_PROMPT = ``;
+const EVALUATE_PROMPT = `You are a real-time fact-checker analyzing a live transcript segment.
+
+Extract every distinct, objectively checkable factual claim from the transcript (statistics, historical events, quotes, records, verifiable facts). Skip pure opinions, predictions, hypotheticals, rhetoric, and vague generalities.
+
+For each claim, evaluate it using your own knowledge and output a JSON array of objects with EXACTLY these fields:
+- "claim": concise self-contained restatement of the claim (max ~25 words)
+- "verdict": one of "TRUE", "SUBSTANTIALLY TRUE", "FALSE", "MISLEADING", "UNVERIFIABLE"
+- "confidence": one of "HIGH", "MEDIUM", "LOW"
+- "explanation": 1-2 sentence justification with the key facts
+- "speaker": name of who made the claim, or "Unknown" — NEVER "Speaker N"
+
+Verdict guide:
+- TRUE: accurate as stated
+- SUBSTANTIALLY TRUE: correct in substance, minor imprecision in numbers or details
+- FALSE: contradicted by established facts
+- MISLEADING: technically containing truth but framed to create a false impression, or missing critical context
+- UNVERIFIABLE: cannot be checked (personal anecdotes, private conversations, unfalsifiable statements)
+
+Rules:
+- Do not re-evaluate claims listed as already fact-checked, including close paraphrases.
+- Evaluate claims relative to the recording date when provided; ignore later events.
+- Output ONLY the raw JSON array. No markdown, no code fences, no commentary.
+- If there are no checkable claims, output exactly: []`;
 
 
-const GROUNDED_PROMPT = ``;
+const GROUNDED_PROMPT = `You are a fact-checker performing a second-pass verification of a single claim using web search evidence.
+
+You receive: the transcript context, the claim, a preliminary "fast" verdict made without web access, and web search evidence (direct answers, knowledge panels, and numbered snippets).
+
+Re-evaluate the claim against the evidence and output a JSON array containing ONE object with EXACTLY these fields:
+- "claim": the claim, restated concisely (max ~25 words)
+- "verdict": one of "TRUE", "SUBSTANTIALLY TRUE", "FALSE", "MISLEADING", "UNVERIFIABLE"
+- "confidence": one of "HIGH", "MEDIUM", "LOW"
+- "explanation": 1-2 sentences citing the strongest evidence
+- "speaker": name of who made the claim, or "Unknown" — NEVER "Speaker N"
+
+Rules:
+- Search snippets are short and lack context: prefer the fast verdict unless the evidence CLEARLY and directly contradicts it. Do not downgrade a TRUE or SUBSTANTIALLY TRUE fast verdict based on ambiguous or partial snippets.
+- Use the evidence primarily to confirm, refine confidence, or upgrade an uncertain verdict.
+- Evaluate the claim as of the recording date when provided; ignore evidence about later events.
+- If the evidence is irrelevant to the claim, keep the fast verdict with confidence "LOW".
+- Output ONLY the raw JSON array. No markdown, no code fences, no commentary.`;
 
 
 const SPEAKER_PARSE_NOISE = new Set(['debate','presidential','vp','vice','2024','2023','2022','2021','2020','2019','2016','surrounded','tonight','live','full','official']);
@@ -138,22 +195,40 @@ async function searchWeb(query, retries = 2) {
 // ── Claude ────────────────────────────────────────────────────────────────────
  
 async function callClaude(userMessage, systemPrompt) {
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': ANTHROPIC_KEY,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true',
-    },
-    body: JSON.stringify({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 768,
-      temperature: 0,
-      system: systemPrompt,
-      messages: [{ role: 'user', content: userMessage }],
-    }),
-  });
+  const alias = SELECTED_MODEL || 'haiku';
+  const url = USE_BRIDGE ? BRIDGE_URL : 'https://api.anthropic.com/v1/messages';
+  // Bridge understands aliases directly; the direct API wants a concrete model id.
+  const model = USE_BRIDGE ? alias : (MODEL_IDS[alias] || MODEL_IDS.haiku);
+
+  const headers = { 'Content-Type': 'application/json' };
+  if (!USE_BRIDGE) {
+    headers['x-api-key'] = ANTHROPIC_KEY;
+    headers['anthropic-version'] = '2023-06-01';
+    headers['anthropic-dangerous-direct-browser-access'] = 'true';
+  }
+
+  let res;
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        model,
+        max_tokens: 768,
+        temperature: 0,
+        system: systemPrompt,
+        messages: [{ role: 'user', content: userMessage }],
+      }),
+    });
+  } catch (e) {
+    const msg = USE_BRIDGE
+      ? `Local bridge unreachable at ${url} — is warm-bridge.js running?`
+      : `Network error: ${e.message}`;
+    console.error('[claude]', msg);
+    if (activeTabId) chrome.tabs.sendMessage(activeTabId, { type: 'PIPELINE_ERROR', message: msg }).catch(() => {});
+    return '';
+  }
+
   const data = await res.json();
   if (data.error) {
     const msg = data.error.message || 'Unknown API error';
@@ -641,7 +716,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
             console.error('[service-worker] failed to get new stream:', chrome.runtime.lastError.message);
             return;
           }
-          chrome.runtime.sendMessage({ type: 'START_CAPTURE', streamId }).catch(() => {});
+          chrome.runtime.sendMessage({ type: 'START_CAPTURE', streamId, language: TRANSCRIPT_LANGUAGE, deepgramKey: DEEPGRAM_KEY }).catch(() => {});
         });
       }
       break;
@@ -658,7 +733,12 @@ async function startFactCheck() {
   if (isCapturing) return;
  
   await loadKeys();
-  if (!ANTHROPIC_KEY) {
+  // Transcription always runs through Deepgram, so its key is required in every mode.
+  if (!DEEPGRAM_KEY) {
+    throw new Error('Deepgram API key not set. Please enter it in the extension popup.');
+  }
+  // In bridge mode auth is handled by warm-bridge.js (subscription) — no API key needed.
+  if (!USE_BRIDGE && !ANTHROPIC_KEY) {
     throw new Error('Anthropic API key not set. Please enter it in the extension popup.');
   }
  
@@ -666,6 +746,11 @@ async function startFactCheck() {
   if (!tab) throw new Error('No active tab found.');
   activeTabId = tab.id;
  
+  // Tear down any stale capture (e.g. after a service-worker restart) so the
+  // tab isn't still "busy" when we request a new stream — otherwise
+  // getMediaStreamId throws "Cannot capture a tab with an active stream".
+  await teardownCapture();
+
   try {
     await ensureOffscreenDocument();
     console.log('[service-worker] offscreen document created');
@@ -680,7 +765,7 @@ async function startFactCheck() {
     });
   });
  
-  const response = await chrome.runtime.sendMessage({ type: 'START_CAPTURE', streamId, language: TRANSCRIPT_LANGUAGE });
+  const response = await chrome.runtime.sendMessage({ type: 'START_CAPTURE', streamId, language: TRANSCRIPT_LANGUAGE, deepgramKey: DEEPGRAM_KEY });
   if (!response?.ok) throw new Error('Failed to start capture: ' + response?.error);
  
   // reset BEFORE sending START_FACTCHECK — transcripts arrive immediately after
@@ -719,4 +804,19 @@ async function ensureOffscreenDocument() {
     reasons: ['USER_MEDIA'],
     justification: 'Capture tab audio for Deepgram transcription',
   });
+}
+
+// Close any lingering offscreen document so Chrome releases the tab's audio
+// capture before we ask for a fresh stream. Needed because the service worker
+// can be killed while a capture is live: its in-memory isCapturing flag resets
+// to false, but the offscreen doc keeps the old MediaStream open on the tab.
+async function teardownCapture() {
+  try {
+    const existing = await chrome.runtime.getContexts({ contextTypes: ['OFFSCREEN_DOCUMENT'] });
+    if (existing.length === 0) return;
+    try { await chrome.runtime.sendMessage({ type: 'STOP_CAPTURE' }); } catch (_) {}
+    await chrome.offscreen.closeDocument();
+  } catch (err) {
+    console.warn('[service-worker] teardownCapture failed:', err);
+  }
 }

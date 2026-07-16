@@ -16,11 +16,13 @@
     "https://google.serper.dev/*",
     "https://fonts.googleapis.com/*",
     "https://fonts.gstatic.com/*",
-    "wss://api.deepgram.com/*"
+    "wss://api.deepgram.com/*",
+    "http://127.0.0.1:8787/*",
+    "http://localhost:8787/*"
   ],
 
   "background": {
-    "service_worker": "src/background/service-worker.js"
+    "service_worker": "src/background/service-worker-ex.js"
   },
 
   "action": {

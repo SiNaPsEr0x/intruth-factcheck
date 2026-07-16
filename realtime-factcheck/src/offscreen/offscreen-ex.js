@@ -2,7 +2,12 @@
 // Captures tab audio via tabCapture and streams to Deepgram WebSocket.
 // Deepgram handles transcription — no Web Speech API.
 
-const DEEPGRAM_KEY = '';
+// The Deepgram API key is NOT hardcoded here. It is entered by the user in the
+// extension popup, saved to chrome.storage.local, and delivered with each
+// START_CAPTURE message. We cache the last values so silent reconnects
+// (REQUEST_NEW_STREAM) can reuse them without the popup being open.
+let deepgramKey = '';
+let lastLanguage = 'en';
 
 let mediaStream = null;
 let audioContext = null;
@@ -12,11 +17,14 @@ let active = false;
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg.type === 'START_CAPTURE') {
-    startCapture(msg.streamId, msg.language || 'en')
+    startCapture(msg.streamId, msg.language || lastLanguage, msg.deepgramKey)
       .then(() => sendResponse({ ok: true }))
       .catch(err => {
-        console.error('[offscreen] error:', err);
-        sendResponse({ ok: false, error: err.message });
+        // DOMException stringifies to a useless "[object DOMException]" — surface
+        // its .name and .message so the real cause is visible in the error panel.
+        const detail = err && err.name ? `${err.name}: ${err.message}` : String(err);
+        console.error('[offscreen] startCapture failed:', detail);
+        sendResponse({ ok: false, error: detail });
       });
     return true;
   }
@@ -30,20 +38,45 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 let utteranceBuffer = '';
 let utteranceSpeakerCounts = {}; // track speaker word counts across buffer chunks
 
-async function startCapture(streamId, language = 'en') {
+async function startCapture(streamId, language = 'en', key) {
   if (active) stopCapture();
   active = true;
 
+  // The Deepgram key arrives with START_CAPTURE (saved by the popup in
+  // chrome.storage.local); cache it so silent reconnects can reuse it. Without a
+  // key the WebSocket subprotocol below would be ['token', ''] — and an empty
+  // subprotocol throws an opaque "subprotocol '' is invalid" SyntaxError. Fail
+  // fast with a clear, actionable reason instead.
+  if (key) deepgramKey = key;
+  lastLanguage = language;
+  if (!deepgramKey) {
+    active = false;
+    throw new Error('Deepgram API key missing — open the InTruth popup and paste your Deepgram key.');
+  }
+
+  // A tabCapture stream ID is single-use and short-lived; an empty/expired one
+  // makes getUserMedia throw an opaque DOMException. Fail fast with a clear reason.
+  if (!streamId) {
+    active = false;
+    throw new Error('No tab stream ID — getMediaStreamId returned empty (tab busy or no active-tab permission?).');
+  }
+
   // get tab audio stream
-  mediaStream = await navigator.mediaDevices.getUserMedia({
-    audio: {
-      mandatory: {
-        chromeMediaSource: 'tab',
-        chromeMediaSourceId: streamId,
+  try {
+    mediaStream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        mandatory: {
+          chromeMediaSource: 'tab',
+          chromeMediaSourceId: streamId,
+        },
       },
-    },
-    video: false,
-  });
+      video: false,
+    });
+  } catch (err) {
+    active = false;
+    // Re-throw with the DOMException name/message attached so the caller logs the real cause.
+    throw new Error(`getUserMedia(tab) failed: ${err.name || 'Error'} — ${err.message || err}`);
+  }
 
   // connect deepgram websocket
   socket = new WebSocket(
@@ -60,7 +93,7 @@ async function startCapture(streamId, language = 'en') {
       'vad_events=true',
       'diarize=true',
     ].join('&'),
-    ['token', DEEPGRAM_KEY]
+    ['token', deepgramKey]
   );
 
   socket.onopen = () => {

@@ -1,0 +1,3 @@
+# Claude OAuth token saved internally by the warm bridge — never commit this
+bridge/.claude-oauth-token
+.claude-oauth-token

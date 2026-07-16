@@ -15,6 +15,26 @@
 
     <div class="keys-section" id="keysSection">
       <div class="key-field">
+        <label class="key-label">Model</label>
+        <select class="key-input key-select" id="modelSelect">
+          <option value="haiku">Haiku — fastest, cheapest</option>
+          <option value="sonnet">Sonnet — balanced</option>
+          <option value="opus">Opus — most capable</option>
+        </select>
+      </div>
+      <div class="key-field">
+        <label class="key-toggle">
+          <input type="checkbox" id="useBridge"/>
+          <span>Use local subscription (warm bridge)</span>
+        </label>
+        <div class="key-hint" id="bridgeHint">Runs Claude via your subscription — start <code>warm-bridge.js</code> first.</div>
+      </div>
+      <div class="key-field" id="deepgramKeyField">
+        <label class="key-label">Deepgram API Key</label>
+        <input class="key-input" id="deepgramKey" type="password" placeholder="Deepgram API key" autocomplete="off"/>
+        <div class="key-hint" id="deepgramHint">Powers live transcription — get a free key at <a class="key-link" href="https://console.deepgram.com/signup" target="_blank" rel="noopener">console.deepgram.com</a>.</div>
+      </div>
+      <div class="key-field" id="apiKeyField">
         <label class="key-label">Anthropic API Key</label>
         <input class="key-input" id="anthropicKey" type="password" placeholder="sk-ant-..." autocomplete="off"/>
       </div>
