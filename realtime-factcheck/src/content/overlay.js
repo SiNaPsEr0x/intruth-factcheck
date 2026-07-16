@@ -309,6 +309,7 @@ function createPanel() {
   panel = document.createElement('div');
   panel.id = 'rtfc-panel';
   panel.innerHTML = [
+    '<div id="rtfc-resize-handle"></div>',
     '<div id="rtfc-header">',
       '<span><span class="rtfc-dot"></span>InTruth</span>',
       '<div class="rtfc-header-actions">',
@@ -357,7 +358,7 @@ function createPanel() {
 
   panel.querySelector('#rtfc-export').addEventListener('click', () => exportPDF());
 
-  makeDraggable(panel);
+  makeResizable(panel);
 
   panel.querySelector('#rtfc-transcript-toggle').addEventListener('click', () => {
     transcriptCollapsed = !transcriptCollapsed;
@@ -520,6 +521,9 @@ function buildCard(result) {
         '<span class="rtfc-speaker-arrow">▾</span>',
       '</button>',
       '<div class="rtfc-speaker-explanation" style="display:none">',
+        (result.speaker_confidence_explanation
+          ? '<div class="rtfc-conviction-row rtfc-conviction-row--model">' + escapeHtml(result.speaker_confidence_explanation) + '</div>'
+          : ''),
         lexicalRows,
       '</div>',
     '</div>',
@@ -630,25 +634,44 @@ function updateVerdict(result) {
   logVerdict(result);
 }
 
-function makeDraggable(panel) {
-  const header = panel.querySelector('#rtfc-header');
-  let isDragging = false, startX, startY, startLeft, startTop;
-  header.addEventListener('mousedown', (e) => {
-    if (e.target.id === 'rtfc-close' || e.target.id === 'rtfc-export') return;
-    isDragging = true;
-    startX = e.clientX; startY = e.clientY;
-    const rect = panel.getBoundingClientRect();
-    startLeft = rect.left; startTop = rect.top;
-    header.style.cursor = 'grabbing';
+function makeResizable(panel) {
+  const handle = panel.querySelector('#rtfc-resize-handle');
+  const MIN_W = 280;
+  const maxW = () => Math.round(window.innerWidth * 0.7);
+
+  // Restore persisted width
+  chrome.storage.local.get('rtfcPanelWidth', ({ rtfcPanelWidth }) => {
+    if (rtfcPanelWidth) {
+      const w = Math.min(Math.max(rtfcPanelWidth, MIN_W), maxW());
+      panel.style.setProperty('--rtfc-width', w + 'px');
+    }
+  });
+
+  let isResizing = false, startX = 0, startWidth = 0;
+
+  handle.addEventListener('pointerdown', (e) => {
+    isResizing = true;
+    startX = e.clientX;
+    startWidth = panel.getBoundingClientRect().width;
+    handle.classList.add('rtfc-resizing');
+    handle.setPointerCapture(e.pointerId);
     e.preventDefault();
   });
-  document.addEventListener('mousemove', (e) => {
-    if (!isDragging) return;
-    panel.style.right = 'unset';
-    panel.style.left  = Math.max(0, startLeft + e.clientX - startX) + 'px';
-    panel.style.top   = Math.max(0, startTop  + e.clientY - startY) + 'px';
+
+  handle.addEventListener('pointermove', (e) => {
+    if (!isResizing) return;
+    const w = Math.min(Math.max(startWidth + (startX - e.clientX), MIN_W), maxW());
+    panel.style.setProperty('--rtfc-width', w + 'px');
   });
-  document.addEventListener('mouseup', () => { isDragging = false; header.style.cursor = 'grab'; });
+
+  handle.addEventListener('pointerup', (e) => {
+    if (!isResizing) return;
+    isResizing = false;
+    handle.classList.remove('rtfc-resizing');
+    handle.releasePointerCapture(e.pointerId);
+    const w = Math.round(panel.getBoundingClientRect().width);
+    chrome.storage.local.set({ rtfcPanelWidth: w });
+  });
 }
 
 // ── Messages ──────────────────────────────────────────────────────────────────
