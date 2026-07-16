@@ -1,15 +1,17 @@
 // pcm-worklet.js
-// AudioWorkletProcessor that converts float32 audio to int16 PCM and posts
-// batches to the main thread (replaces the deprecated ScriptProcessorNode).
-// Runs on the audio rendering thread in 128-frame quanta; we accumulate
-// 4096 samples per message to match the previous ScriptProcessor chunk size.
+// AudioWorkletProcessor that batches float32 audio and posts it to the main
+// thread for on-device Whisper transcription (replaces the deprecated
+// ScriptProcessorNode). Runs on the audio rendering thread in 128-frame quanta;
+// we accumulate BATCH_SIZE samples per message. Whisper expects Float32 samples
+// in [-1, 1] at 16 kHz, which is exactly what the AudioContext already delivers,
+// so no int16 conversion is done here.
 
 const BATCH_SIZE = 4096;
 
 class PcmCaptureProcessor extends AudioWorkletProcessor {
   constructor() {
     super();
-    this._buffer = new Int16Array(BATCH_SIZE);
+    this._buffer = new Float32Array(BATCH_SIZE);
     this._offset = 0;
   }
 
@@ -18,13 +20,12 @@ class PcmCaptureProcessor extends AudioWorkletProcessor {
     if (!channel) return true; // no input yet — keep processor alive
 
     for (let i = 0; i < channel.length; i++) {
-      this._buffer[this._offset++] =
-        Math.max(-32768, Math.min(32767, channel[i] * 32768));
+      this._buffer[this._offset++] = channel[i];
 
       if (this._offset === BATCH_SIZE) {
         // transfer the buffer to avoid a copy, then start a fresh one
         this.port.postMessage(this._buffer.buffer, [this._buffer.buffer]);
-        this._buffer = new Int16Array(BATCH_SIZE);
+        this._buffer = new Float32Array(BATCH_SIZE);
         this._offset = 0;
       }
     }

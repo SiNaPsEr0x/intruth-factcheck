@@ -1,8 +1,8 @@
 // service-worker.js
 let ANTHROPIC_KEY = '';
-let DEEPGRAM_KEY = '';
 const SERPER_KEY = '';
 let TRANSCRIPT_LANGUAGE = 'en';
+let WHISPER_MODEL = 'base';   // on-device Whisper size: 'tiny' | 'base' | 'small'
 
 // ── Model + routing config ────────────────────────────────────────────────────
 // Alias → Anthropic API model id (used only on the direct-API path).
@@ -18,10 +18,10 @@ let BRIDGE_URL = 'http://127.0.0.1:8787/v1/messages';
 async function loadKeys() {
   return new Promise(resolve => {
     chrome.storage.local.get(
-      ['anthropicKey', 'deepgramKey', 'transcriptLanguage', 'selectedModel', 'useBridge', 'bridgeUrl'],
+      ['anthropicKey', 'whisperModel', 'transcriptLanguage', 'selectedModel', 'useBridge', 'bridgeUrl'],
       (data) => {
         ANTHROPIC_KEY = data.anthropicKey || '';
-        DEEPGRAM_KEY = data.deepgramKey || '';
+        WHISPER_MODEL = data.whisperModel || 'base';
         TRANSCRIPT_LANGUAGE = data.transcriptLanguage || 'en';
         SELECTED_MODEL = data.selectedModel || 'haiku';
         USE_BRIDGE = data.useBridge === true;
@@ -451,7 +451,7 @@ async function onNewSentence(text, speakerId) {
     const dominantSpeakerId = Object.keys(counts).length
       ? Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0]
       : null;
-    // use confirmed name from speakerIdToName — ground truth from Deepgram + user confirmation
+    // use confirmed name from speakerIdToName — ground truth from user confirmation
     const dominantSpeaker = dominantSpeakerId !== null
       ? (speakerIdToName[dominantSpeakerId] || null)
       : null;
@@ -733,6 +733,16 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         chrome.tabs.sendMessage(activeTabId, { type: 'PIPELINE_ERROR', message: msg.message }).catch(() => {});
       }
       break;
+
+    case 'MODEL_PROGRESS':
+      // forward Whisper model download/load progress from offscreen doc to overlay
+      if (activeTabId) {
+        chrome.tabs.sendMessage(activeTabId, {
+          type: 'MODEL_PROGRESS', status: msg.status, file: msg.file,
+          progress: msg.progress, loaded: msg.loaded, total: msg.total, device: msg.device,
+        }).catch(() => {});
+      }
+      break;
  
     case 'REQUEST_NEW_STREAM':
       // offscreen doc lost its stream — get a fresh tabCapture stream ID
@@ -742,7 +752,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
             console.error('[service-worker] failed to get new stream:', chrome.runtime.lastError.message);
             return;
           }
-          chrome.runtime.sendMessage({ type: 'START_CAPTURE', streamId, language: TRANSCRIPT_LANGUAGE, deepgramKey: DEEPGRAM_KEY }).catch(() => {});
+          chrome.runtime.sendMessage({ type: 'START_CAPTURE', streamId, language: TRANSCRIPT_LANGUAGE, whisperModel: WHISPER_MODEL }).catch(() => {});
         });
       }
       break;
@@ -759,10 +769,7 @@ async function startFactCheck() {
   if (isCapturing) return;
  
   await loadKeys();
-  // Transcription always runs through Deepgram, so its key is required in every mode.
-  if (!DEEPGRAM_KEY) {
-    throw new Error('Deepgram API key not set. Please enter it in the extension popup.');
-  }
+  // Transcription runs fully on-device (Whisper via WebGPU) — no STT key needed.
   // In bridge mode auth is handled by warm-bridge.js (subscription) — no API key needed.
   if (!USE_BRIDGE && !ANTHROPIC_KEY) {
     throw new Error('Anthropic API key not set. Please enter it in the extension popup.');
@@ -791,7 +798,7 @@ async function startFactCheck() {
     });
   });
  
-  const response = await chrome.runtime.sendMessage({ type: 'START_CAPTURE', streamId, language: TRANSCRIPT_LANGUAGE, deepgramKey: DEEPGRAM_KEY });
+  const response = await chrome.runtime.sendMessage({ type: 'START_CAPTURE', streamId, language: TRANSCRIPT_LANGUAGE, whisperModel: WHISPER_MODEL });
   if (!response?.ok) throw new Error('Failed to start capture: ' + response?.error);
  
   // reset BEFORE sending START_FACTCHECK — transcripts arrive immediately after
@@ -828,7 +835,7 @@ async function ensureOffscreenDocument() {
   await chrome.offscreen.createDocument({
     url: chrome.runtime.getURL('src/offscreen/offscreen.html'),
     reasons: ['USER_MEDIA'],
-    justification: 'Capture tab audio for Deepgram transcription',
+    justification: 'Capture tab audio for on-device Whisper transcription',
   });
 }
 

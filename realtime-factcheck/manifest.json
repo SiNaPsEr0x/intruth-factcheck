@@ -16,10 +16,16 @@
     "https://google.serper.dev/*",
     "https://fonts.googleapis.com/*",
     "https://fonts.gstatic.com/*",
-    "wss://api.deepgram.com/*",
+    "https://huggingface.co/*",
+    "https://*.huggingface.co/*",
+    "https://*.hf.co/*",
     "http://127.0.0.1:8787/*",
     "http://localhost:8787/*"
   ],
+
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+  },
 
   "background": {
     "service_worker": "src/background/service-worker-ex.js"
