@@ -31,11 +31,11 @@ function stopSession() {
 
 function exportPDF() {
   if (!sessionLog.length) {
-    alert('No claims detected in this session yet.');
+    alert(t('pdfNoClaims'));
     return;
   }
 
-  const pageTitle = document.title || 'Fact Check Session';
+  const pageTitle = document.title || t('pdfSessionTitle');
   const exportDate = new Date().toLocaleString();
 
   const verdictColor = (v, c) => {
@@ -55,7 +55,7 @@ function exportPDF() {
     const rawSpk = entry.speakerName;
     const spk = (rawSpk && !rawSpk.match(/^Speaker\s*\d+$/i) && rawSpk !== 'Other')
       ? rawSpk
-      : 'Unknown';
+      : t('pdfUnknown');
     if (!speakerGroups[spk]) { speakerGroups[spk] = []; speakerOrder.push(spk); }
     speakerGroups[spk].push({ entry, i });
   });
@@ -66,7 +66,7 @@ function exportPDF() {
     const color = spk !== 'Other' ? speakerColors[spkIdx % speakerColors.length] : '#888';
     const headerHTML = '<div class="speaker-section-header" style="border-left:3px solid ' + color + '">' +
       '<span class="speaker-section-name" style="color:' + color + '">' + escapeHtml(spk) + '</span>' +
-      '<span class="speaker-section-count">' + speakerGroups[spk].length + ' claim' + (speakerGroups[spk].length !== 1 ? 's' : '') + '</span>' +
+      '<span class="speaker-section-count">' + speakerGroups[spk].length + ' ' + (speakerGroups[spk].length !== 1 ? t('pdfClaimPlural') : t('pdfClaimSingular')) + '</span>' +
     '</div>';
 
     const cardsHTML = speakerGroups[spk].map(({ entry, i }) => {
@@ -76,23 +76,23 @@ function exportPDF() {
       const vcolor = verdictColor(entry.verdict, entry.confidence);
 
       const sourcesHTML = entry.sources.length
-        ? '<div class="sources"><span class="sources-label">Sources:</span>' +
+        ? '<div class="sources"><span class="sources-label">' + escapeHtml(t('pdfSources')) + '</span>' +
           entry.sources.map((url, j) =>
-            '<a href="' + escapeHtml(url) + '" class="source-link">Source ' + (j + 1) + '</a>'
+            '<a href="' + escapeHtml(url) + '" class="source-link">' + escapeHtml(t('pdfSource')) + ' ' + (j + 1) + '</a>'
           ).join('') + '</div>'
         : '';
 
       return '<div class="claim-card">' +
         '<div class="claim-header">' +
           '<span class="claim-number">#' + (i + 1) + '</span>' +
-          '<span class="verdict" style="color:' + vcolor + '">' + escapeHtml(entry.verdict) + '</span>' +
-          '<span class="confidence">' + escapeHtml(entry.confidence) + ' certainty</span>' +
+          '<span class="verdict" style="color:' + vcolor + '">' + escapeHtml(tEnum('verdict', entry.verdict)) + '</span>' +
+          '<span class="confidence">' + escapeHtml(tEnum('confidence', entry.confidence)) + escapeHtml(t('certaintySuffix')) + '</span>' +
           '<span class="timestamp">' + escapeHtml(timestamp) + '</span>' +
         '</div>' +
         '<div class="claim-text">"' + escapeHtml(entry.claim) + '"</div>' +
         '<div class="explanation">' + escapeHtml(entry.explanation) + '</div>' +
-        '<div class="speaker-row"><span class="speaker-label">Speaker conviction:</span> ' +
-          escapeHtml(entry.speakerConfidence || 'N/A') +
+        '<div class="speaker-row"><span class="speaker-label">' + escapeHtml(t('speakerConviction').trim()) + '</span> ' +
+          escapeHtml(entry.speakerConfidence ? tEnum('confidence', entry.speakerConfidence) : t('notAvailable')) +
         '</div>' +
         sourcesHTML +
       '</div>';
@@ -108,7 +108,7 @@ function exportPDF() {
   const unverifiableCount = sessionLog.filter(e => e.verdict === 'UNVERIFIABLE').length;
 
   const html = '<!DOCTYPE html><html><head><meta charset="utf-8"/>' +
-    '<title>Fact Check Report</title><style>' +
+    '<title>' + escapeHtml(t('pdfReportTitle')) + '</title><style>' +
     '* { box-sizing: border-box; margin: 0; padding: 0; }' +
     'body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; font-size: 13px; color: #111; padding: 40px; max-width: 800px; margin: 0 auto; line-height: 1.5; }' +
     '.report-header { border-bottom: 2px solid #111; padding-bottom: 16px; margin-bottom: 24px; }' +
@@ -140,21 +140,21 @@ function exportPDF() {
     '@media print { body { padding: 20px; } .claim-card { page-break-inside: avoid; } }' +
     '</style></head><body>' +
     '<div class="report-header">' +
-      '<div class="report-title">Fact Check Report</div>' +
+      '<div class="report-title">' + escapeHtml(t('pdfReportTitle')) + '</div>' +
       '<div class="report-meta">' +
         '<span>📺 ' + escapeHtml(pageTitle) + '</span>' +
         '<span>🕐 ' + escapeHtml(exportDate) + '</span>' +
-        '<span>📋 ' + sessionLog.length + ' claim' + (sessionLog.length !== 1 ? 's' : '') + ' detected</span>' +
+        '<span>📋 ' + sessionLog.length + ' ' + (sessionLog.length !== 1 ? t('pdfClaimPlural') : t('pdfClaimSingular')) + ' ' + (sessionLog.length !== 1 ? t('pdfDetectedPlural') : t('pdfDetectedSingular')) + '</span>' +
       '</div>' +
     '</div>' +
     '<div class="summary">' +
-      '<div class="summary-item"><span class="summary-count true">' + trueCount + '</span><span class="summary-label">True</span></div>' +
-      '<div class="summary-item"><span class="summary-count subtrue">' + subTrueCount + '</span><span class="summary-label">Substantially True</span></div>' +
-      '<div class="summary-item"><span class="summary-count false">' + falseCount + '</span><span class="summary-label">False</span></div>' +
-      '<div class="summary-item"><span class="summary-count misleading">' + misleadingCount + '</span><span class="summary-label">Misleading</span></div>' +
-      '<div class="summary-item"><span class="summary-count unverifiable">' + unverifiableCount + '</span><span class="summary-label">Unverifiable</span></div>' +
+      '<div class="summary-item"><span class="summary-count true">' + trueCount + '</span><span class="summary-label">' + escapeHtml(t('pdfSummaryTrue')) + '</span></div>' +
+      '<div class="summary-item"><span class="summary-count subtrue">' + subTrueCount + '</span><span class="summary-label">' + escapeHtml(t('pdfSummarySubTrue')) + '</span></div>' +
+      '<div class="summary-item"><span class="summary-count false">' + falseCount + '</span><span class="summary-label">' + escapeHtml(t('pdfSummaryFalse')) + '</span></div>' +
+      '<div class="summary-item"><span class="summary-count misleading">' + misleadingCount + '</span><span class="summary-label">' + escapeHtml(t('pdfSummaryMisleading')) + '</span></div>' +
+      '<div class="summary-item"><span class="summary-count unverifiable">' + unverifiableCount + '</span><span class="summary-label">' + escapeHtml(t('pdfSummaryUnverifiable')) + '</span></div>' +
     '</div>' +
-    '<div class="claims-title">Claims (' + sessionLog.length + ')</div>' +
+    '<div class="claims-title">' + escapeHtml(t('claims')) + ' (' + sessionLog.length + ')</div>' +
     claimsHTML +
     '</body></html>';
 
