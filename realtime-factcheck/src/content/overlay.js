@@ -11,6 +11,108 @@ function escapeHtml(s) {
     .replace(/'/g, '&#39;');
 }
 
+// ── I18N — static UI labels only ─────────────────────────────────────────────
+// Model-generated content language is handled by TRANSCRIPT_LANGUAGE /
+// languageInstruction in the service worker; do NOT duplicate that here.
+const I18N = {
+  en: {
+    unverified: '⚠ unverified',
+    newSpeakerQuestion: 'New speaker detected — who is this?',
+    skip: 'Skip',
+    exportTitle: 'Export session as PDF',
+    exportBtn: '↓ Export',
+    transcript: 'Transcript',
+    claims: 'Claims',
+    verdicts: 'Verdicts',
+    verdictsEmpty: 'Verdicts will appear here...',
+    hedgingLabel: 'Hedging language:',
+    hedgingSuffix: '% rate — e.g. "I think", "maybe", "probably"',
+    certaintyLabel: 'Certainty markers:',
+    certaintySuffixEx: '% rate — e.g. "definitely", "always"',
+    fillerLabel: 'Filler words:',
+    fillerSuffix: '% rate — e.g. "um", "like", "you know"',
+    emotionalLabel: 'Emotional language:',
+    rateSuffix: '% rate',
+    qualifyingLabel: 'Qualifying words:',
+    qualifyingSuffix: '% rate — e.g. "but", "except"',
+    firstPersonLabel: 'First-person singular:',
+    speechRateLabel: 'Speech rate:',
+    rateFast: 'fast',
+    rateSlow: 'slow',
+    rateModerate: 'moderate',
+    source: 'Source',
+    verifying: '⟳ verifying...',
+    certaintySuffix: ' certainty',
+    speakerConviction: 'Speaker conviction: ',
+    notAvailable: 'N/A',
+    pipelineError: 'An error occurred in the fact-checking pipeline.',
+    'verdict_TRUE': 'TRUE',
+    'verdict_SUBSTANTIALLY TRUE': 'SUBSTANTIALLY TRUE',
+    'verdict_FALSE': 'FALSE',
+    'verdict_MISLEADING': 'MISLEADING',
+    'verdict_UNVERIFIABLE': 'UNVERIFIABLE',
+    'confidence_HIGH': 'HIGH',
+    'confidence_MEDIUM': 'MEDIUM',
+    'confidence_LOW': 'LOW',
+  },
+  it: {
+    unverified: '⚠ non verificato',
+    newSpeakerQuestion: 'Nuovo speaker rilevato — chi è?',
+    skip: 'Salta',
+    exportTitle: 'Esporta la sessione in PDF',
+    exportBtn: '↓ Esporta',
+    transcript: 'Trascrizione',
+    claims: 'Affermazioni',
+    verdicts: 'Verdetti',
+    verdictsEmpty: 'I verdetti appariranno qui...',
+    hedgingLabel: 'Linguaggio esitante:',
+    hedgingSuffix: '% di frequenza — es. "I think", "maybe", "probably"',
+    certaintyLabel: 'Marcatori di certezza:',
+    certaintySuffixEx: '% di frequenza — es. "definitely", "always"',
+    fillerLabel: 'Parole riempitive:',
+    fillerSuffix: '% di frequenza — es. "um", "like", "you know"',
+    emotionalLabel: 'Linguaggio emotivo:',
+    rateSuffix: '% di frequenza',
+    qualifyingLabel: 'Parole limitative:',
+    qualifyingSuffix: '% di frequenza — es. "but", "except"',
+    firstPersonLabel: 'Prima persona singolare:',
+    speechRateLabel: 'Velocità di eloquio:',
+    rateFast: 'veloce',
+    rateSlow: 'lenta',
+    rateModerate: 'moderata',
+    source: 'Fonte',
+    verifying: '⟳ verifica in corso...',
+    certaintySuffix: ' di certezza',
+    speakerConviction: 'Convinzione dello speaker: ',
+    notAvailable: 'N/D',
+    pipelineError: 'Si è verificato un errore nella pipeline di fact-checking.',
+    'verdict_TRUE': 'VERO',
+    'verdict_SUBSTANTIALLY TRUE': 'SOSTANZIALMENTE VERO',
+    'verdict_FALSE': 'FALSO',
+    'verdict_MISLEADING': 'FUORVIANTE',
+    'verdict_UNVERIFIABLE': 'NON VERIFICABILE',
+    'confidence_HIGH': 'ALTA',
+    'confidence_MEDIUM': 'MEDIA',
+    'confidence_LOW': 'BASSA',
+  },
+};
+
+const LANG = (navigator.language || 'en').toLowerCase().startsWith('it') ? 'it' : 'en';
+
+function t(key) {
+  const table = I18N[LANG] || I18N.en;
+  return table[key] ?? I18N.en[key] ?? key;
+}
+
+// display-only translation for enum values coming from the model
+// (verdict / confidence); falls back to the raw value if unknown
+function tEnum(prefix, value) {
+  if (value === null || value === undefined || value === '') return t('notAvailable');
+  const key = prefix + '_' + String(value).toUpperCase();
+  const table = I18N[LANG] || I18N.en;
+  return table[key] ?? I18N.en[key] ?? value;
+}
+
 let panel = null;
 let transcriptFeedEl = null;
 let interimEl = null;
@@ -29,7 +131,7 @@ setInterval(() => {
       if (card) {
         card.classList.remove('rtfc-verdict--pending');
         const verifying = card.querySelector('.rtfc-verifying');
-        if (verifying) verifying.textContent = '⚠ unverified';
+        if (verifying) verifying.textContent = t('unverified');
       }
       pendingCards.delete(key);
       pendingCardTimes.delete(key);
@@ -157,13 +259,13 @@ function showSpeakerBanner(speakerId, sample) {
   const banner = document.createElement('div');
   banner.className = 'rtfc-speaker-banner';
   banner.innerHTML =
-    '<div class="rtfc-speaker-banner-text">New speaker detected — who is this?</div>' +
+    '<div class="rtfc-speaker-banner-text">' + escapeHtml(t('newSpeakerQuestion')) + '</div>' +
     '<div class="rtfc-speaker-banner-sample">"' + escapeHtml(sample) + '..."</div>' +
     '<div class="rtfc-speaker-banner-buttons">' +
       speakers.map(name =>
         '<button class="rtfc-speaker-banner-btn" data-name="' + escapeHtml(name) + '" data-id="' + sid + '">' + escapeHtml(name) + '</button>'
       ).join('') +
-      '<button class="rtfc-speaker-banner-btn rtfc-speaker-banner-btn--skip" data-id="' + sid + '">Skip</button>' +
+      '<button class="rtfc-speaker-banner-btn rtfc-speaker-banner-btn--skip" data-id="' + sid + '">' + escapeHtml(t('skip')) + '</button>' +
     '</div>';
 
   banner.querySelectorAll('.rtfc-speaker-banner-btn').forEach(btn => {
@@ -313,14 +415,14 @@ function createPanel() {
     '<div id="rtfc-header">',
       '<span><span class="rtfc-dot"></span>InTruth</span>',
       '<div class="rtfc-header-actions">',
-        '<button id="rtfc-export" title="Export session as PDF">↓ Export</button>',
+        '<button id="rtfc-export" title="' + escapeHtml(t('exportTitle')) + '">' + escapeHtml(t('exportBtn')) + '</button>',
         '<button id="rtfc-close">✕</button>',
       '</div>',
     '</div>',
     '<div id="rtfc-body">',
       '<div id="rtfc-transcript-section">',
         '<div class="rtfc-section-header">',
-          '<span class="rtfc-section-label">Transcript</span>',
+          '<span class="rtfc-section-label">' + escapeHtml(t('transcript')) + '</span>',
           '<button class="rtfc-toggle-btn" id="rtfc-transcript-toggle">▾</button>',
         '</div>',
         '<div id="rtfc-transcript-feed"></div>',
@@ -328,17 +430,17 @@ function createPanel() {
       '</div>',
       '<div id="rtfc-claims-section">',
         '<div class="rtfc-section-header">',
-          '<span class="rtfc-section-label">Claims</span>',
+          '<span class="rtfc-section-label">' + escapeHtml(t('claims')) + '</span>',
         '</div>',
         '<ul id="rtfc-claim-feed"></ul>',
       '</div>',
       '<div id="rtfc-verdicts-section">',
         '<div class="rtfc-section-header">',
-          '<span class="rtfc-section-label">Verdicts</span>',
+          '<span class="rtfc-section-label">' + escapeHtml(t('verdicts')) + '</span>',
           '<div id="rtfc-speaker-editor"></div>',
         '</div>',
         '<div id="rtfc-verdicts">',
-          '<p class="rtfc-empty">Verdicts will appear here...</p>',
+          '<p class="rtfc-empty">' + escapeHtml(t('verdictsEmpty')) + '</p>',
         '</div>',
       '</div>',
     '</div>',
@@ -451,20 +553,20 @@ function buildLexicalRows(lexical) {
   const rows = [];
   const r = lexical.rates || {};
   if (r.hedging > 0)
-    rows.push('<div class="rtfc-conviction-row"><span class="rtfc-conviction-label">Hedging language:</span> ' + r.hedging + '% rate — e.g. "I think", "maybe", "probably"</div>');
+    rows.push('<div class="rtfc-conviction-row"><span class="rtfc-conviction-label">' + escapeHtml(t('hedgingLabel')) + '</span> ' + r.hedging + escapeHtml(t('hedgingSuffix')) + '</div>');
   if (r.certainty > 0)
-    rows.push('<div class="rtfc-conviction-row"><span class="rtfc-conviction-label">Certainty markers:</span> ' + r.certainty + '% rate — e.g. "definitely", "always"</div>');
+    rows.push('<div class="rtfc-conviction-row"><span class="rtfc-conviction-label">' + escapeHtml(t('certaintyLabel')) + '</span> ' + r.certainty + escapeHtml(t('certaintySuffixEx')) + '</div>');
   if (r.filler > 0)
-    rows.push('<div class="rtfc-conviction-row"><span class="rtfc-conviction-label">Filler words:</span> ' + r.filler + '% rate — e.g. "um", "like", "you know"</div>');
+    rows.push('<div class="rtfc-conviction-row"><span class="rtfc-conviction-label">' + escapeHtml(t('fillerLabel')) + '</span> ' + r.filler + escapeHtml(t('fillerSuffix')) + '</div>');
   if (r.emotional > 0)
-    rows.push('<div class="rtfc-conviction-row"><span class="rtfc-conviction-label">Emotional language:</span> ' + r.emotional + '% rate</div>');
+    rows.push('<div class="rtfc-conviction-row"><span class="rtfc-conviction-label">' + escapeHtml(t('emotionalLabel')) + '</span> ' + r.emotional + escapeHtml(t('rateSuffix')) + '</div>');
   if (r.exclusive > 0)
-    rows.push('<div class="rtfc-conviction-row"><span class="rtfc-conviction-label">Qualifying words:</span> ' + r.exclusive + '% rate — e.g. "but", "except"</div>');
+    rows.push('<div class="rtfc-conviction-row"><span class="rtfc-conviction-label">' + escapeHtml(t('qualifyingLabel')) + '</span> ' + r.exclusive + escapeHtml(t('qualifyingSuffix')) + '</div>');
   if (r.firstPersonSg > 0)
-    rows.push('<div class="rtfc-conviction-row"><span class="rtfc-conviction-label">First-person singular:</span> ' + r.firstPersonSg + '% rate</div>');
+    rows.push('<div class="rtfc-conviction-row"><span class="rtfc-conviction-label">' + escapeHtml(t('firstPersonLabel')) + '</span> ' + r.firstPersonSg + escapeHtml(t('rateSuffix')) + '</div>');
   if (lexical.wordsPerSecond != null) {
-    const rateDesc = lexical.wordsPerSecond > 3.5 ? 'fast' : lexical.wordsPerSecond < 2 ? 'slow' : 'moderate';
-    rows.push('<div class="rtfc-conviction-row"><span class="rtfc-conviction-label">Speech rate:</span> ' + lexical.wordsPerSecond + ' w/s (' + rateDesc + ')</div>');
+    const rateDesc = lexical.wordsPerSecond > 3.5 ? t('rateFast') : lexical.wordsPerSecond < 2 ? t('rateSlow') : t('rateModerate');
+    rows.push('<div class="rtfc-conviction-row"><span class="rtfc-conviction-label">' + escapeHtml(t('speechRateLabel')) + '</span> ' + lexical.wordsPerSecond + ' w/s (' + escapeHtml(rateDesc) + ')</div>');
   }
   return rows.join('');
 }
@@ -486,7 +588,7 @@ function buildCard(result) {
   const sourcesHTML = (result.sources ?? []).map((url, i) => {
     const isUrl = url.startsWith('http://') || url.startsWith('https://');
     return isUrl
-      ? '<a href="' + escapeHtml(url) + '" target="_blank" rel="noopener">Source ' + (i + 1) + '</a>'
+      ? '<a href="' + escapeHtml(url) + '" target="_blank" rel="noopener">' + escapeHtml(t('source')) + ' ' + (i + 1) + '</a>'
       : '<span class="rtfc-source-text">' + escapeHtml(url) + '</span>';
   }).join('');
 
@@ -507,9 +609,9 @@ function buildCard(result) {
   card.innerHTML = [
     speakerTag,
     '<div class="rtfc-verdict-header">',
-      '<span class="rtfc-badge rtfc-badge--' + color + '">' + escapeHtml(result.verdict) + '</span>',
-      result.pending ? '<span class="rtfc-verifying">⟳ verifying...</span>' : '',
-      '<span class="rtfc-confidence-right">' + escapeHtml(result.confidence) + ' certainty</span>',
+      '<span class="rtfc-badge rtfc-badge--' + color + '">' + escapeHtml(tEnum('verdict', result.verdict)) + '</span>',
+      result.pending ? '<span class="rtfc-verifying">' + escapeHtml(t('verifying')) + '</span>' : '',
+      '<span class="rtfc-confidence-right">' + escapeHtml(tEnum('confidence', result.confidence)) + escapeHtml(t('certaintySuffix')) + '</span>',
       '<span class="rtfc-timestamp">' + escapeHtml(result._timestamp || '') + '</span>',
     '</div>',
     '<p class="rtfc-claim">"' + escapeHtml(result.claim) + '"</p>',
@@ -517,7 +619,7 @@ function buildCard(result) {
     '<div class="rtfc-speaker-confidence">',
       '<button class="rtfc-speaker-toggle">',
         '<span class="rtfc-speaker-dot rtfc-speaker-dot--' + convictionColor + '"></span>',
-        'Speaker conviction: ' + escapeHtml(result.speaker_confidence || 'N/A'),
+        escapeHtml(t('speakerConviction')) + escapeHtml(tEnum('confidence', result.speaker_confidence)),
         '<span class="rtfc-speaker-arrow">▾</span>',
       '</button>',
       '<div class="rtfc-speaker-explanation" style="display:none">',
@@ -726,7 +828,7 @@ chrome.runtime.onMessage.addListener((msg) => {
       break;
 
     case 'PIPELINE_ERROR':
-      showError(msg.message || 'An error occurred in the fact-checking pipeline.');
+      showError(msg.message || t('pipelineError'));
       break;
 
     case 'NEW_VERDICT':
