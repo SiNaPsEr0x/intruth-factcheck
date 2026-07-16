@@ -55,6 +55,18 @@
   border-bottom: 0.5px solid rgba(255,255,255,0.07);
   flex-shrink: 0;
   user-select: none;
+  cursor: grab;
+  touch-action: none;
+}
+
+#rtfc-header.rtfc-dragging { cursor: grabbing; }
+
+/* Floating mode — panel detached from the right edge and movable anywhere.
+   ID+class specificity (1,1,0) beats the base #rtfc-panel rule (1,0,0). */
+#rtfc-panel.rtfc-floating {
+  border: 0.5px solid rgba(255,255,255,0.08);
+  border-radius: 14px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
 }
 
 #rtfc-header > span {

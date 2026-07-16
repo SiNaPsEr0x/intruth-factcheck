@@ -493,6 +493,7 @@ function createPanel() {
   panel.querySelector('#rtfc-export').addEventListener('click', () => exportPDF());
 
   makeResizable(panel);
+  makeDraggable(panel);
 
   panel.querySelector('#rtfc-transcript-toggle').addEventListener('click', () => {
     transcriptCollapsed = !transcriptCollapsed;
@@ -805,6 +806,87 @@ function makeResizable(panel) {
     handle.releasePointerCapture(e.pointerId);
     const w = Math.round(panel.getBoundingClientRect().width);
     chrome.storage.local.set({ rtfcPanelWidth: w });
+  });
+}
+
+// Detach the panel from the right edge and let it be moved anywhere by
+// grabbing the header. Position + floating state persist across sessions.
+function makeDraggable(panel) {
+  const header = panel.querySelector('#rtfc-header');
+  if (!header) return;
+
+  // Switch from the docked (right-anchored, full-height) layout to a floating
+  // window, freezing the current height so it no longer spans the viewport.
+  function enterFloating() {
+    if (panel.classList.contains('rtfc-floating')) return;
+    const rect = panel.getBoundingClientRect();
+    const h = Math.min(rect.height, Math.round(window.innerHeight * 0.8));
+    panel.classList.add('rtfc-floating');
+    panel.style.right = 'auto';
+    panel.style.bottom = 'auto';
+    panel.style.height = h + 'px';
+    panel.style.left = Math.round(rect.left) + 'px';
+    panel.style.top = Math.round(rect.top) + 'px';
+  }
+
+  // Clamp the panel fully inside the viewport.
+  function moveTo(left, top) {
+    const rect = panel.getBoundingClientRect();
+    const maxLeft = Math.max(0, window.innerWidth - rect.width);
+    const maxTop = Math.max(0, window.innerHeight - rect.height);
+    panel.style.left = Math.min(Math.max(0, left), maxLeft) + 'px';
+    panel.style.top = Math.min(Math.max(0, top), maxTop) + 'px';
+  }
+
+  // Restore a persisted floating position.
+  chrome.storage.local.get(['rtfcFloating', 'rtfcLeft', 'rtfcTop'], (d) => {
+    if (d.rtfcFloating && typeof d.rtfcLeft === 'number' && typeof d.rtfcTop === 'number') {
+      enterFloating();
+      moveTo(d.rtfcLeft, d.rtfcTop);
+    }
+  });
+
+  let isDragging = false, startX = 0, startY = 0, startLeft = 0, startTop = 0;
+
+  header.addEventListener('pointerdown', (e) => {
+    // Don't start a drag from the export/close controls.
+    if (e.target.closest('button')) return;
+    isDragging = true;
+    enterFloating();
+    const rect = panel.getBoundingClientRect();
+    startX = e.clientX;
+    startY = e.clientY;
+    startLeft = rect.left;
+    startTop = rect.top;
+    header.classList.add('rtfc-dragging');
+    header.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  });
+
+  header.addEventListener('pointermove', (e) => {
+    if (!isDragging) return;
+    moveTo(startLeft + (e.clientX - startX), startTop + (e.clientY - startY));
+  });
+
+  header.addEventListener('pointerup', (e) => {
+    if (!isDragging) return;
+    isDragging = false;
+    header.classList.remove('rtfc-dragging');
+    try { header.releasePointerCapture(e.pointerId); } catch (_) {}
+    const rect = panel.getBoundingClientRect();
+    chrome.storage.local.set({
+      rtfcFloating: true,
+      rtfcLeft: Math.round(rect.left),
+      rtfcTop: Math.round(rect.top),
+    });
+  });
+
+  // Keep a floating panel on-screen if the window is resized.
+  window.addEventListener('resize', () => {
+    if (panel.classList.contains('rtfc-floating')) {
+      const rect = panel.getBoundingClientRect();
+      moveTo(rect.left, rect.top);
+    }
   });
 }
 
