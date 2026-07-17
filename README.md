@@ -4,8 +4,6 @@
 
 > beta aperta! nessuna API key necessaria, la trovi qui / beta open! no API key needed, find it @ https://intruth-beta.vercel.app/ :-3
 
-[![Chrome Web Store](https://img.shields.io/badge/Chrome%20Web%20Store-InTruth-blue)](https://chromewebstore.google.com/detail/InTruth/ikmpglbpcdoapfelcbfpoaddmhmaaocg?hl=en&authuser=0)
-
 <img width="400" height="225" alt="InTruth" src="https://github.com/user-attachments/assets/a0a8fba9-c28f-473c-866d-84951a9b548e" />
 
 ---
@@ -137,10 +135,6 @@ Il fact-checking è per natura imperfetto! I verdetti generati possono a volte e
 
 - Chrome Manifest V3 / browser Chromium moderno con supporto **WebGPU**
 - chiave API AI fornita dall'utente **oppure** Claude Code + `warm-bridge.js` per l'abbonamento locale
-
-### Contribuire
-
-mi farebbe piacere ricevere consigli, idee di funzionalità e casi limite che avete trovato!
 
 ### Licenza
 
@@ -275,10 +269,6 @@ Fact-checking is inherently imperfect! Generated verdicts may occasionally be in
 
 - Chrome Manifest V3 / modern Chromium-based browser with **WebGPU** support
 - user-provided AI API key **or** Claude Code + `warm-bridge.js` for the local subscription
-
-### Contributing
-
-would love advice, any features you'd like, and any edge cases you've found!
 
 ### License
 
