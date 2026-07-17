@@ -2,8 +2,6 @@
 
 **🌐 [Italiano](#italiano) · [English](#english)**
 
-> beta aperta! nessuna API key necessaria, la trovi qui / beta open! no API key needed, find it @ https://intruth-beta.vercel.app/ :-3
-
 <img width="400" height="225" alt="InTruth" src="https://github.com/user-attachments/assets/a0a8fba9-c28f-473c-866d-84951a9b548e" />
 
 ---
