@@ -23,6 +23,28 @@ env.backends.onnx.wasm.wasmPaths = {
 // An offscreen document is not cross-origin isolated, so SharedArrayBuffer is
 // unavailable and ORT must stay single-threaded (WebGPU does the heavy lifting).
 env.backends.onnx.wasm.numThreads = 1;
+// The wasm is vendored locally (chrome-extension:// URL), so there is nothing to
+// gain from caching it — and Transformers.js' default wasm caching tries to
+// cache.put() that request, which the Cache API rejects with
+// "Request scheme 'chrome-extension' is unsupported". Disable it to kill that
+// noisy error. Model-weight caching (useBrowserCache) stays on for HuggingFace.
+env.useWasmCache = false;
+
+// WebGPU on Windows ignores the `powerPreference` adapter option and logs a
+// warning (crbug.com/369219127) on every requestAdapter() call. Transformers.js
+// buries a "high-performance" default inside the ONNX Runtime env before we can
+// reliably clear it, and the wasm backend re-adds it on its own requestAdapter()
+// path — so nulling `env.backends.onnx.webgpu.powerPreference` wasn't enough.
+// Intercept at the source instead: strip the (no-op on Windows) hint from every
+// requestAdapter() caller. Behaviour is unchanged; only the warning disappears.
+if (navigator.gpu && /Windows/i.test(navigator.userAgent)) {
+  const gpu = navigator.gpu;
+  const requestAdapter = gpu.requestAdapter.bind(gpu);
+  gpu.requestAdapter = (options = {}) => {
+    const { powerPreference, ...rest } = options ?? {};
+    return requestAdapter(rest);
+  };
+}
 
 // Popup exposes tiny/base/small; map to the multilingual ONNX repos.
 const MODEL_IDS = {
@@ -30,6 +52,64 @@ const MODEL_IDS = {
   base:  'onnx-community/whisper-base',
   small: 'onnx-community/whisper-small',
 };
+
+// ── Auto language detection + translation ────────────────────────────────────
+// In 'auto' mode Whisper detects the spoken language by itself; when the
+// detected language (it/en) differs from the browser UI language, the final
+// text is machine-translated on-device (MarianMT opus-mt via Transformers.js)
+// so the overlay only ever shows the browser's language.
+const BROWSER_LANG = (navigator.language || 'en').toLowerCase().startsWith('it') ? 'it' : 'en';
+const TRANSLATOR_IDS = {
+  'en-it': 'Xenova/opus-mt-en-it',
+  'it-en': 'Xenova/opus-mt-it-en',
+};
+const translators = {}; // 'src-tgt' → pipeline promise (lazy, cached)
+
+function getTranslator(src, tgt) {
+  const key = `${src}-${tgt}`;
+  const modelId = TRANSLATOR_IDS[key];
+  if (!modelId) return null;
+  translators[key] ??= pipeline('translation', modelId, {
+    device: 'wasm', // MarianMT is tiny; wasm avoids competing with Whisper on the GPU
+    dtype: 'q8',
+    progress_callback: (p) => {
+      chrome.runtime.sendMessage({ type: 'MODEL_PROGRESS', device: 'wasm', ...p }).catch(() => {});
+    },
+  }).catch(err => { delete translators[key]; throw err; });
+  return translators[key];
+}
+
+// Cheap it/en detection via stopword scoring — Whisper already transcribed in
+// the original language, so a word-list vote is enough to pick the direction.
+const IT_WORDS = new Set(['il','lo','la','gli','che','di','è','un','una','uno','per','con','non','sono','del','della','delle','dei','questo','questa','anche','come','più','ma','se','ci','si','ha','hanno','essere','stato','stata','molto','perché','quando','dove','loro','noi','voi','io','lui','lei','cosa','fatto','fare','tutto','tutti','già','così','quindi','però','ancora','ecco','allora','proprio','solo','senza','dopo','prima','oggi','anni','anno']);
+const EN_WORDS = new Set(['the','and','of','to','a','in','is','it','you','that','he','was','for','on','are','with','as','they','be','at','this','have','from','or','had','by','not','but','what','we','can','were','all','your','when','there','their','will','would','about','which','she','do','how','if','them','been','has','more','who','its','now','people','than','other','just','so','because','going','think','know','said','right','very']);
+
+function detectLang(text) {
+  let it = 0, en = 0;
+  for (const w of text.toLowerCase().match(/[a-zà-ú']+/g) || []) {
+    if (IT_WORDS.has(w)) it++;
+    if (EN_WORDS.has(w)) en++;
+  }
+  if (it === en) return null; // ambiguous — leave the text as-is
+  return it > en ? 'it' : 'en';
+}
+
+// Translate a final transcript into the browser language when the detected
+// language differs. Falls back to the original text on any failure.
+async function toBrowserLang(text) {
+  if (language !== 'auto') return text;
+  const detected = detectLang(text);
+  if (!detected || detected === BROWSER_LANG) return text;
+  try {
+    const translator = await getTranslator(detected, BROWSER_LANG);
+    if (!translator) return text;
+    const out = await translator(text);
+    return (out?.[0]?.translation_text || text).trim();
+  } catch (err) {
+    console.warn('[offscreen] translation failed, showing original:', err);
+    return text;
+  }
+}
 
 // ── Audio / transcription tuning ─────────────────────────────────────────────
 const SAMPLE_RATE        = 16000;
@@ -133,16 +213,10 @@ async function startCapture(streamId, lang = 'en', modelSize) {
     throw new Error('No tab stream ID — getMediaStreamId returned empty (tab busy or no active-tab permission?).');
   }
 
-  const modelId = MODEL_IDS[modelSize] || MODEL_IDS.base;
-  try {
-    await ensureModel(modelId);
-  } catch (err) {
-    active = false;
-    throw new Error(`Whisper model load failed: ${err.name || 'Error'} — ${err.message || err}`);
-  }
-  if (!active) return; // stopped while the model was still loading
-
-  // get tab audio stream
+  // 1) Consume the stream token FIRST, while it is still fresh. getMediaStreamId
+  //    hands back a single-use, short-lived ID; loading the (potentially
+  //    multi-second) Whisper model before consuming it lets the token expire, and
+  //    getUserMedia then throws "AbortError — Error starting tab capture".
   try {
     mediaStream = await navigator.mediaDevices.getUserMedia({
       audio: {
@@ -158,7 +232,24 @@ async function startCapture(streamId, lang = 'en', modelSize) {
     throw new Error(`getUserMedia(tab) failed: ${err.name || 'Error'} — ${err.message || err}`);
   }
 
+  // 2) Wire up the audio graph now so the user keeps hearing the tab (capturing
+  //    the stream mutes the tab's own playback until we reconnect it) while the
+  //    model loads. PCM batches buffer harmlessly until the inference loop starts.
   await startAudioPipeline();
+
+  // 3) Load Whisper — this is the slow part, and it no longer holds the token.
+  const modelId = MODEL_IDS[modelSize] || MODEL_IDS.base;
+  try {
+    await ensureModel(modelId);
+  } catch (err) {
+    stopCapture();
+    throw new Error(`Whisper model load failed: ${err.name || 'Error'} — ${err.message || err}`);
+  }
+  if (!active) { stopCapture(); return; } // stopped while the model was still loading
+
+  // 4) Drop the audio buffered during model load so the first pass isn't a huge
+  //    backlog, then start transcribing.
+  audio = new Float32Array(0);
   startInferenceLoop();
 }
 
@@ -170,7 +261,9 @@ async function startAudioPipeline() {
   source.connect(audioContext.destination);
 
   // AudioWorklet delivers Float32 mono @16kHz batches on the audio thread.
-  await audioContext.audioWorklet.addModule('pcm-worklet.js');
+  // Use an absolute extension URL: relative resolution can abort inside an
+  // offscreen document ("Unable to load a worklet's module").
+  await audioContext.audioWorklet.addModule(chrome.runtime.getURL('src/offscreen/pcm-worklet.js'));
   worklet = new AudioWorkletNode(audioContext, 'pcm-capture', {
     numberOfInputs: 1,
     numberOfOutputs: 1,
@@ -244,7 +337,8 @@ async function runInference() {
     });
 
     const out = await transcriber(snapshot, {
-      language,
+      // 'auto' → null lets Whisper detect the spoken language on its own
+      language: language === 'auto' ? null : language,
       task: 'transcribe',
       streamer,
     });
@@ -252,10 +346,14 @@ async function runInference() {
 
     if (shouldCommit) {
       if (text) {
+        // Auto mode: show only the browser's language. Interim text streams in
+        // the original language (translating every pass would add latency);
+        // the committed line replaces it with the translated version.
+        const shown = await toBrowserLang(text);
         // Whisper does not diarize; speaker is null and Claude attributes it
         // from the surrounding context (speaker names / page title).
         chrome.runtime.sendMessage({
-          type: 'TRANSCRIPT_RESULT', text, isFinal: true, interim: false, speaker: null,
+          type: 'TRANSCRIPT_RESULT', text: shown, isFinal: true, interim: false, speaker: null,
         }).catch(() => {});
         chrome.runtime.sendMessage({ type: 'UTTERANCE_END' }).catch(() => {});
       }
@@ -271,8 +369,14 @@ async function runInference() {
     }
   } catch (err) {
     const detail = err && err.name ? `${err.name}: ${err.message}` : String(err);
-    console.error('[offscreen] inference error:', detail);
-    chrome.runtime.sendMessage({ type: 'PIPELINE_ERROR', message: 'Transcription error: ' + detail }).catch(() => {});
+    // "token_ids must be a non-empty array of integers" — benign: the decoder
+    // produced no tokens for a (near-)silent window. Skip this pass quietly.
+    if (/token_ids/.test(detail)) {
+      console.debug('[offscreen] empty decode (silence), skipping pass');
+    } else {
+      console.error('[offscreen] inference error:', detail);
+      chrome.runtime.sendMessage({ type: 'PIPELINE_ERROR', message: 'Transcription error: ' + detail }).catch(() => {});
+    }
   } finally {
     busy = false;
   }

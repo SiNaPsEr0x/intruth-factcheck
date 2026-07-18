@@ -11,42 +11,53 @@
       <span class="title">InTruth</span>
     </div>
 
-    <div class="status" id="status">Inactive</div>
+    <div class="status" id="status" data-i18n="statusInactive">Inactive</div>
 
     <div class="keys-section" id="keysSection">
       <div class="key-field">
-        <label class="key-label">Model</label>
+        <label class="key-label" data-i18n="labelModel">Model</label>
         <select class="key-input key-select" id="modelSelect">
-          <option value="haiku">Haiku — fastest, cheapest</option>
-          <option value="sonnet">Sonnet — balanced</option>
-          <option value="opus">Opus — most capable</option>
+          <option value="haiku" data-i18n="optHaiku">Haiku — fastest, cheapest</option>
+          <option value="sonnet" data-i18n="optSonnet">Sonnet — balanced</option>
+          <option value="opus" data-i18n="optOpus">Opus — most capable</option>
         </select>
       </div>
       <div class="key-field">
         <label class="key-toggle">
           <input type="checkbox" id="useBridge"/>
-          <span>Use local subscription (warm bridge)</span>
+          <span data-i18n="useBridge">Use local subscription (warm bridge)</span>
         </label>
-        <div class="key-hint" id="bridgeHint">Runs Claude via your subscription — start <code>warm-bridge.js</code> first.</div>
+        <div class="key-hint" id="bridgeHint" data-i18n="bridgeHint">Runs Claude via your subscription — start <code>warm-bridge.js</code> first.</div>
       </div>
       <div class="key-field" id="whisperModelField">
-        <label class="key-label">Transcription (local, WebGPU)</label>
+        <label class="key-label" data-i18n="labelWhisper">Transcription (local, WebGPU)</label>
         <select class="key-input key-select" id="whisperModel">
-          <option value="tiny">Tiny — fastest, least accurate</option>
-          <option value="base">Base — balanced (recommended)</option>
-          <option value="small">Small — most accurate, heavier</option>
+          <option value="tiny" data-i18n="optTiny">Tiny — fastest, least accurate</option>
+          <option value="base" data-i18n="optBase">Base — balanced (recommended)</option>
+          <option value="small" data-i18n="optSmall">Small — most accurate, heavier</option>
         </select>
-        <div class="key-hint" id="whisperHint">Runs Whisper in your browser via WebGPU — no key, no cloud. First run downloads the model (cached afterwards).</div>
+        <div class="key-hint" id="whisperHint" data-i18n="whisperHint">Runs Whisper in your browser via WebGPU — no key, no cloud. First run downloads the model (cached afterwards).</div>
+      </div>
+      <div class="key-field" id="cacheSection">
+        <label class="key-label" data-i18n="labelCache">Downloaded models</label>
+        <div class="cache-list" id="cacheList">
+          <div class="cache-empty" data-i18n="cacheChecking">Checking cache…</div>
+        </div>
+        <div class="cache-footer">
+          <span class="cache-total" id="cacheTotal"></span>
+          <button class="cache-clear" id="cacheClearBtn" data-i18n="cacheClear" hidden>Clear cache</button>
+        </div>
       </div>
       <div class="key-field" id="apiKeyField">
-        <label class="key-label">Anthropic API Key</label>
+        <label class="key-label" data-i18n="labelApiKey">Anthropic API Key</label>
         <input class="key-input" id="anthropicKey" type="password" placeholder="sk-ant-..." autocomplete="off"/>
       </div>
       <div class="key-field">
-        <label class="key-label">Language</label>
+        <label class="key-label" data-i18n="labelLanguage">Language</label>
         <div class="lang-row">
           <span id="langFlag" class="lang-flag">🇺🇸</span>
           <select class="key-input key-select" id="languageSelect">
+            <option value="auto" selected>auto</option>
             <option value="en">en</option>
             <option value="es">es</option>
             <option value="fr">fr</option>
@@ -69,7 +80,7 @@
       <div class="key-hint" id="keyHint"></div>
     </div>
 
-    <button class="toggle-btn" id="toggleBtn">Start Fact-Checking</button>
+    <button class="toggle-btn" id="toggleBtn" data-i18n="btnStart">Start Fact-Checking</button>
   </div>
   <script src="popup.js"></script>
 </body>

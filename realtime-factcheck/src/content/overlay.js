@@ -523,21 +523,58 @@ function removePanel() {
 }
 
 // ── Transcript ────────────────────────────────────────────────────────────────
+// Smart autoscroll: only follow new text if the user is already pinned at the
+// bottom of the feed; if they scrolled up to read/select, leave them alone.
+function feedPinnedToBottom() {
+  if (!transcriptFeedEl) return true;
+  return transcriptFeedEl.scrollHeight - transcriptFeedEl.scrollTop - transcriptFeedEl.clientHeight < 24;
+}
+
+// Persistent inline "ghost" span at the tail of the feed: interim text streams
+// here and is replaced in place by the committed sentence (no separate line,
+// no layout jumps).
+function getInterimGhost() {
+  if (!transcriptFeedEl) return null;
+  let ghost = transcriptFeedEl.querySelector('.rtfc-interim-ghost');
+  if (!ghost) {
+    ghost = document.createElement('span');
+    ghost.className = 'rtfc-interim-ghost';
+    transcriptFeedEl.appendChild(ghost);
+  }
+  return ghost;
+}
+
 function addTranscriptText(text) {
   if (!transcriptFeedEl) return;
+  const pinned = feedPinnedToBottom();
   const span = document.createElement('span');
   span.textContent = text + ' ';
   span.className = 'rtfc-transcript-word';
-  transcriptFeedEl.appendChild(span);
-  transcriptFeedEl.scrollTop = transcriptFeedEl.scrollHeight;
+  const ghost = getInterimGhost();
+  transcriptFeedEl.insertBefore(span, ghost); // committed text goes before the ghost tail
+  if (pinned) transcriptFeedEl.scrollTop = transcriptFeedEl.scrollHeight;
 }
 
 function updateInterim(text) {
+  const ghost = getInterimGhost();
+  if (!ghost) return;
+  const pinned = feedPinnedToBottom();
+  ghost.textContent = text;
+  if (pinned) transcriptFeedEl.scrollTop = transcriptFeedEl.scrollHeight;
+}
+
+function clearInterim() {
+  const ghost = getInterimGhost();
+  if (ghost) ghost.textContent = '';
+}
+
+// Status line (fixed-height #rtfc-interim bar): model loading / transient info.
+function updateStatusLine(text) {
   if (!interimEl) return;
   interimEl.textContent = text;
 }
 
-function clearInterim() {
+function clearStatusLine() {
   if (!interimEl) return;
   interimEl.textContent = '';
 }
@@ -949,13 +986,13 @@ chrome.runtime.onMessage.addListener((msg) => {
       // show transcription-model download/load progress in the interim line; it
       // is transient and gets replaced by real interim transcripts once ready.
       if (msg.status === 'ready') {
-        clearInterim();
+        clearStatusLine();
       } else if (typeof msg.progress === 'number' && msg.progress < 100) {
         const pct = Math.round(msg.progress);
         const name = (msg.file || '').split('/').pop() || 'model';
-        updateInterim(`⬇ Loading transcription model (${name}) — ${pct}%`);
+        updateStatusLine(`⬇ Loading transcription model (${name}) — ${pct}%`);
       } else if (msg.status === 'initiate' || msg.status === 'download') {
-        updateInterim('⬇ Loading transcription model…');
+        updateStatusLine('⬇ Loading transcription model…');
       }
       break;
 

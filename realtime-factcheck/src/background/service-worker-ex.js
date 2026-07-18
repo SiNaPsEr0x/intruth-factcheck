@@ -1,6 +1,14 @@
 // service-worker.js
 let ANTHROPIC_KEY = '';
-let TRANSCRIPT_LANGUAGE = 'en';
+let TRANSCRIPT_LANGUAGE = 'auto';
+
+// 'auto' → the transcript/overlay language follows the browser UI language
+// (it/en); resolve it so Claude prompts are written in the language the user
+// actually sees. Chrome extension service workers do expose navigator.language.
+function resolvedLanguage() {
+  if (TRANSCRIPT_LANGUAGE !== 'auto') return TRANSCRIPT_LANGUAGE;
+  return (navigator.language || 'en').toLowerCase().startsWith('it') ? 'it' : 'en';
+}
 let WHISPER_MODEL = 'base';   // on-device Whisper size: 'tiny' | 'base' | 'small'
 
 // ── Model + routing config ────────────────────────────────────────────────────
@@ -21,7 +29,7 @@ async function loadKeys() {
       (data) => {
         ANTHROPIC_KEY = data.anthropicKey || '';
         WHISPER_MODEL = data.whisperModel || 'base';
-        TRANSCRIPT_LANGUAGE = data.transcriptLanguage || 'en';
+        TRANSCRIPT_LANGUAGE = data.transcriptLanguage || 'auto';
         SELECTED_MODEL = data.selectedModel || 'haiku';
         USE_BRIDGE = data.useBridge === true;
         BRIDGE_URL = data.bridgeUrl || 'http://127.0.0.1:8787/v1/messages';
@@ -479,8 +487,9 @@ async function evaluateClaims(contextText, title, lexicalSummary, lexicalSnapsho
         `\n- NEVER output "Speaker N" or any [Speaker N] format in any field.`
       : `\nIdentify speakers using first-person language, policy content, and speech patterns. Never output "Speaker N".`;
  
-    const languageInstruction = TRANSCRIPT_LANGUAGE && TRANSCRIPT_LANGUAGE !== 'en'
-      ? `\nLANGUAGE REQUIREMENT: You MUST write the "claim" and "explanation" fields in ${TRANSCRIPT_LANGUAGE}. This is mandatory regardless of what language your sources are in. Only the verdict values (TRUE, FALSE, etc) stay in English.`
+    const displayLang = resolvedLanguage();
+    const languageInstruction = displayLang && displayLang !== 'en'
+      ? `\nLANGUAGE REQUIREMENT: You MUST write the "claim" and "explanation" fields in ${displayLang}. This is mandatory regardless of what language your sources are in. Only the verdict values (TRUE, FALSE, etc) stay in English.`
       : '';
  
     const titleContext = title
@@ -534,8 +543,9 @@ async function evaluateClaims(contextText, title, lexicalSummary, lexicalSnapsho
 async function groundAndUpdate(contextText, fastResults, title, lexicalSummary, lexicalSnapshot, dominantSpeaker, dominantSpeakerId) {
   try {
     const dateCtx      = pageDate ? `\nDate: ${pageDate}` : '';
-    const languageInstruction = TRANSCRIPT_LANGUAGE && TRANSCRIPT_LANGUAGE !== 'en'
-      ? `\nLANGUAGE REQUIREMENT: You MUST write the "claim" and "explanation" fields in ${TRANSCRIPT_LANGUAGE}. This is mandatory regardless of what language your sources are in. Only the verdict values (TRUE, FALSE, etc) stay in English.`
+    const displayLang = resolvedLanguage();
+    const languageInstruction = displayLang && displayLang !== 'en'
+      ? `\nLANGUAGE REQUIREMENT: You MUST write the "claim" and "explanation" fields in ${displayLang}. This is mandatory regardless of what language your sources are in. Only the verdict values (TRUE, FALSE, etc) stay in English.`
       : '';
 
     const titleContext = title

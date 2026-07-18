@@ -179,16 +179,20 @@
 #rtfc-transcript-section {
   border-bottom: 0.5px solid rgba(255,255,255,0.06);
   padding-bottom: 8px;
+  flex-shrink: 0; /* fixed footprint: transcript never squeezes/reflows the panel */
 }
 
 #rtfc-transcript-feed {
-  max-height: 100px;
+  height: 100px;              /* fixed height: no layout jumps while text streams */
   overflow-y: auto;
+  overscroll-behavior: contain; /* wheel inside the feed never scrolls the panel body */
   padding: 4px 14px;
   font-size: 11.5px;
   color: #888;
   line-height: 1.7;
   word-wrap: break-word;
+  user-select: text;
+  cursor: text;
 }
 
 #rtfc-transcript-feed::-webkit-scrollbar { width: 3px; }
@@ -197,12 +201,22 @@
 
 .rtfc-transcript-word { display: inline; }
 
+/* Ghost interim: streamed inline after the committed text, consolidates on commit */
+.rtfc-interim-ghost {
+  display: inline;
+  color: #5a5a5a;
+  font-style: italic;
+}
+
 #rtfc-interim {
   font-size: 11px;
   color: #444;
   font-style: italic;
   padding: 0 14px;
-  min-height: 16px;
+  height: 16px;               /* reserved: appearing/disappearing never reflows */
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
   line-height: 1.5;
 }
 

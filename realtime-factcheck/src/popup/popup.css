@@ -172,6 +172,71 @@ body {
 }
 .key-link:hover { text-decoration: underline; }
 
+/* ── Downloaded models / cache ── */
+
+.cache-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  background: rgba(255,255,255,0.04);
+  border: 0.5px solid rgba(255,255,255,0.08);
+  border-radius: 5px;
+  padding: 6px 8px;
+}
+
+.cache-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  font-size: 10px;
+}
+
+.cache-name {
+  color: #ccc;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cache-size {
+  color: #888;
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.cache-empty {
+  font-size: 10px;
+  color: #555;
+}
+
+.cache-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  min-height: 16px;
+}
+
+.cache-total {
+  font-size: 10px;
+  color: #888;
+}
+
+.cache-clear {
+  background: none;
+  border: 0.5px solid rgba(248, 113, 113, 0.35);
+  border-radius: 4px;
+  color: #f87171;
+  font-family: 'Inter', sans-serif;
+  font-size: 9px;
+  padding: 2px 8px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.cache-clear:hover { background: rgba(248, 113, 113, 0.12); }
+.cache-clear:disabled { opacity: 0.4; cursor: not-allowed; }
+
 /* ── Toggle button ── */
 
 .toggle-btn {
