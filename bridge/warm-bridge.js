@@ -251,6 +251,13 @@ const server = http.createServer((req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Headers', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
+  // Chrome Private Network Access: a fetch from the extension (a more-public
+  // context) to a private address like 127.0.0.1 is preflighted with
+  // `Access-Control-Request-Private-Network: true` and BLOCKED unless the
+  // response grants it. Without this the extension's fetch fails with an opaque
+  // "Failed to fetch" even though the bridge is up and listening — surfacing as
+  // "Local bridge unreachable". Echo the grant on every response (preflight+real).
+  res.setHeader('Access-Control-Allow-Private-Network', 'true');
 
   if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
 

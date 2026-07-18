@@ -258,3 +258,20 @@ body {
 .toggle-btn:hover { opacity: 0.85; }
 .toggle-btn.active { background: #166534; }
 .toggle-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.bridge-warning {
+  font-size: 10px;
+  font-weight: 600;
+  color: #fbbf24;
+  background: rgba(251, 191, 36, 0.12);
+  border: 0.5px solid rgba(251, 191, 36, 0.35);
+  border-radius: 5px;
+  padding: 5px 8px;
+  margin-top: 4px;
+  animation: bridge-blink 1.1s ease-in-out infinite;
+}
+
+@keyframes bridge-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}

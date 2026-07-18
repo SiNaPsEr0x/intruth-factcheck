@@ -26,22 +26,38 @@
   box-shadow: 0 4px 24px rgba(0,0,0,0.4);
 }
 
-/* ── Resize handle ── */
+/* ── Resize handles (4 edges + 4 corners) ── */
 
-#rtfc-resize-handle {
+.rtfc-resize-handle {
   position: absolute;
-  top: 0;
-  left: 0;
-  bottom: 0;
-  width: 6px;
-  cursor: ew-resize;
-  z-index: 1;
+  z-index: 2;
   background: transparent;
+  touch-action: none;
   transition: background 0.15s ease;
 }
 
-#rtfc-resize-handle:hover,
-#rtfc-resize-handle.rtfc-resizing {
+/* Edges */
+.rtfc-rz-n { top: 0; left: 0; right: 0; height: 6px; cursor: ns-resize; }
+.rtfc-rz-s { bottom: 0; left: 0; right: 0; height: 6px; cursor: ns-resize; }
+.rtfc-rz-w { top: 0; bottom: 0; left: 0; width: 6px; cursor: ew-resize; }
+.rtfc-rz-e { top: 0; bottom: 0; right: 0; width: 6px; cursor: ew-resize; }
+
+/* Corners sit above the edges so diagonal resize wins at the overlap. */
+.rtfc-rz-nw, .rtfc-rz-ne, .rtfc-rz-sw, .rtfc-rz-se {
+  width: 12px;
+  height: 12px;
+  z-index: 3;
+}
+.rtfc-rz-nw { top: 0; left: 0; cursor: nwse-resize; }
+.rtfc-rz-ne { top: 0; right: 0; cursor: nesw-resize; }
+.rtfc-rz-sw { bottom: 0; left: 0; cursor: nesw-resize; }
+.rtfc-rz-se { bottom: 0; right: 0; cursor: nwse-resize; }
+
+.rtfc-rz-w:hover,
+.rtfc-rz-e:hover,
+.rtfc-rz-n:hover,
+.rtfc-rz-s:hover,
+.rtfc-resize-handle.rtfc-resizing {
   background: rgba(255,255,255,0.12);
 }
 
@@ -96,6 +112,9 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  /* Stay above the corner resize handles so the buttons remain clickable. */
+  position: relative;
+  z-index: 4;
 }
 
 #rtfc-export {

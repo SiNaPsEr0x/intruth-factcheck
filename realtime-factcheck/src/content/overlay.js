@@ -443,7 +443,14 @@ function createPanel() {
   panel = document.createElement('div');
   panel.id = 'rtfc-panel';
   panel.innerHTML = [
-    '<div id="rtfc-resize-handle"></div>',
+    '<div class="rtfc-resize-handle rtfc-rz-n"  data-dir="n"></div>',
+    '<div class="rtfc-resize-handle rtfc-rz-s"  data-dir="s"></div>',
+    '<div class="rtfc-resize-handle rtfc-rz-w"  data-dir="w"></div>',
+    '<div class="rtfc-resize-handle rtfc-rz-e"  data-dir="e"></div>',
+    '<div class="rtfc-resize-handle rtfc-rz-nw" data-dir="nw"></div>',
+    '<div class="rtfc-resize-handle rtfc-rz-ne" data-dir="ne"></div>',
+    '<div class="rtfc-resize-handle rtfc-rz-sw" data-dir="sw"></div>',
+    '<div class="rtfc-resize-handle rtfc-rz-se" data-dir="se"></div>',
     '<div id="rtfc-header">',
       '<span><span class="rtfc-dot"></span>InTruth</span>',
       '<div class="rtfc-header-actions">',
@@ -806,43 +813,106 @@ function updateVerdict(result) {
   logVerdict(result);
 }
 
-function makeResizable(panel) {
-  const handle = panel.querySelector('#rtfc-resize-handle');
-  const MIN_W = 280;
-  const maxW = () => Math.round(window.innerWidth * 0.7);
+// Switch the panel from the docked (right-anchored, full-height) layout to a
+// floating window, freezing its current geometry so it no longer spans the
+// viewport. Shared by the resize and drag handlers.
+function enterFloating(panel) {
+  if (panel.classList.contains('rtfc-floating')) return;
+  const rect = panel.getBoundingClientRect();
+  const h = Math.min(rect.height, Math.round(window.innerHeight * 0.8));
+  panel.classList.add('rtfc-floating');
+  panel.style.right = 'auto';
+  panel.style.bottom = 'auto';
+  panel.style.height = h + 'px';
+  panel.style.left = Math.round(rect.left) + 'px';
+  panel.style.top = Math.round(rect.top) + 'px';
+}
 
-  // Restore persisted width
+// Resize from any edge/corner. Each handle keeps the opposite edge anchored:
+// dragging the left edge moves the left edge (right stays put), dragging the
+// top edge moves the top (bottom stays put), etc. Vertical resizing detaches
+// the panel into floating mode, since docked panels always span the viewport.
+function makeResizable(panel) {
+  const MIN_W = 280, MIN_H = 200;
+  const maxW = () => Math.round(window.innerWidth * 0.7);
+  const maxH = () => Math.round(window.innerHeight * 0.95);
+  const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi);
+
+  // Restore persisted width.
   chrome.storage.local.get('rtfcPanelWidth', ({ rtfcPanelWidth }) => {
     if (rtfcPanelWidth) {
-      const w = Math.min(Math.max(rtfcPanelWidth, MIN_W), maxW());
-      panel.style.setProperty('--rtfc-width', w + 'px');
+      panel.style.setProperty('--rtfc-width', clamp(rtfcPanelWidth, MIN_W, maxW()) + 'px');
     }
   });
 
-  let isResizing = false, startX = 0, startWidth = 0;
+  const persist = () => {
+    const rect = panel.getBoundingClientRect();
+    const data = { rtfcPanelWidth: Math.round(rect.width) };
+    if (panel.classList.contains('rtfc-floating')) {
+      data.rtfcFloating = true;
+      data.rtfcLeft = Math.round(rect.left);
+      data.rtfcTop = Math.round(rect.top);
+      data.rtfcHeight = Math.round(rect.height);
+    }
+    chrome.storage.local.set(data);
+  };
 
-  handle.addEventListener('pointerdown', (e) => {
-    isResizing = true;
-    startX = e.clientX;
-    startWidth = panel.getBoundingClientRect().width;
-    handle.classList.add('rtfc-resizing');
-    handle.setPointerCapture(e.pointerId);
-    e.preventDefault();
-  });
+  panel.querySelectorAll('.rtfc-resize-handle').forEach((handle) => {
+    const dir = handle.dataset.dir || '';
+    const west = dir.includes('w'), east = dir.includes('e');
+    const north = dir.includes('n'), south = dir.includes('s');
+    const vertical = north || south;
+    let active = false, r0 = null;
 
-  handle.addEventListener('pointermove', (e) => {
-    if (!isResizing) return;
-    const w = Math.min(Math.max(startWidth + (startX - e.clientX), MIN_W), maxW());
-    panel.style.setProperty('--rtfc-width', w + 'px');
-  });
+    handle.addEventListener('pointerdown', (e) => {
+      active = true;
+      // Height is only adjustable once the panel is detached from the edges.
+      if (vertical) enterFloating(panel);
+      r0 = panel.getBoundingClientRect();
+      handle.classList.add('rtfc-resizing');
+      handle.setPointerCapture(e.pointerId);
+      e.preventDefault();
+      e.stopPropagation();
+    });
 
-  handle.addEventListener('pointerup', (e) => {
-    if (!isResizing) return;
-    isResizing = false;
-    handle.classList.remove('rtfc-resizing');
-    handle.releasePointerCapture(e.pointerId);
-    const w = Math.round(panel.getBoundingClientRect().width);
-    chrome.storage.local.set({ rtfcPanelWidth: w });
+    handle.addEventListener('pointermove', (e) => {
+      if (!active) return;
+      const floating = panel.classList.contains('rtfc-floating');
+
+      // Horizontal axis — anchor the edge we're not dragging.
+      if (east) {
+        panel.style.setProperty('--rtfc-width', clamp(e.clientX - r0.left, MIN_W, maxW()) + 'px');
+      } else if (west) {
+        let w = clamp(r0.right - e.clientX, MIN_W, maxW());
+        if (floating) {
+          let left = r0.right - w;
+          if (left < 0) { left = 0; w = r0.right; }
+          panel.style.left = left + 'px';
+        }
+        panel.style.setProperty('--rtfc-width', w + 'px');
+      }
+
+      // Vertical axis — only meaningful while floating.
+      if (floating && south) {
+        panel.style.height = clamp(e.clientY - r0.top, MIN_H, maxH()) + 'px';
+      } else if (floating && north) {
+        let h = clamp(r0.bottom - e.clientY, MIN_H, maxH());
+        let top = r0.bottom - h;
+        if (top < 0) { top = 0; h = r0.bottom; }
+        panel.style.top = top + 'px';
+        panel.style.height = h + 'px';
+      }
+    });
+
+    const end = (e) => {
+      if (!active) return;
+      active = false;
+      handle.classList.remove('rtfc-resizing');
+      try { handle.releasePointerCapture(e.pointerId); } catch (_) {}
+      persist();
+    };
+    handle.addEventListener('pointerup', end);
+    handle.addEventListener('pointercancel', end);
   });
 }
 
@@ -851,20 +921,6 @@ function makeResizable(panel) {
 function makeDraggable(panel) {
   const header = panel.querySelector('#rtfc-header');
   if (!header) return;
-
-  // Switch from the docked (right-anchored, full-height) layout to a floating
-  // window, freezing the current height so it no longer spans the viewport.
-  function enterFloating() {
-    if (panel.classList.contains('rtfc-floating')) return;
-    const rect = panel.getBoundingClientRect();
-    const h = Math.min(rect.height, Math.round(window.innerHeight * 0.8));
-    panel.classList.add('rtfc-floating');
-    panel.style.right = 'auto';
-    panel.style.bottom = 'auto';
-    panel.style.height = h + 'px';
-    panel.style.left = Math.round(rect.left) + 'px';
-    panel.style.top = Math.round(rect.top) + 'px';
-  }
 
   // Clamp the panel fully inside the viewport.
   function moveTo(left, top) {
@@ -875,10 +931,14 @@ function makeDraggable(panel) {
     panel.style.top = Math.min(Math.max(0, top), maxTop) + 'px';
   }
 
-  // Restore a persisted floating position.
-  chrome.storage.local.get(['rtfcFloating', 'rtfcLeft', 'rtfcTop'], (d) => {
+  // Restore a persisted floating position (and height, if resized).
+  chrome.storage.local.get(['rtfcFloating', 'rtfcLeft', 'rtfcTop', 'rtfcHeight'], (d) => {
     if (d.rtfcFloating && typeof d.rtfcLeft === 'number' && typeof d.rtfcTop === 'number') {
-      enterFloating();
+      enterFloating(panel);
+      if (typeof d.rtfcHeight === 'number') {
+        const h = Math.min(Math.max(d.rtfcHeight, 200), Math.round(window.innerHeight * 0.95));
+        panel.style.height = h + 'px';
+      }
       moveTo(d.rtfcLeft, d.rtfcTop);
     }
   });
@@ -889,7 +949,7 @@ function makeDraggable(panel) {
     // Don't start a drag from the export/close controls.
     if (e.target.closest('button')) return;
     isDragging = true;
-    enterFloating();
+    enterFloating(panel);
     const rect = panel.getBoundingClientRect();
     startX = e.clientX;
     startY = e.clientY;

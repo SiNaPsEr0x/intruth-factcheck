@@ -59,6 +59,13 @@ Nel popup puoi scegliere il modello Claude — **Haiku** (più veloce/economico)
 
 `bridge/warm-bridge.js` è un piccolo server HTTP locale che espone la stessa forma della Messages API di Anthropic, ma dietro le quinte invoca la CLI di **Claude Code** — così usi il tuo **abbonamento** invece di una API key a consumo. Ogni richiesta lancia un processo `claude -p` indipendente (one-shot, in parallelo).
 
+> ⚡ **In breve — cosa devi avviare/configurare:**
+> 1. **Installa e autentica Claude Code** (una tantum): `claude login`.
+> 2. **Avvia il bridge** ad ogni sessione, in un terminale che resti aperto: `node bridge/warm-bridge.js`.
+> 3. **Nel popup dell'estensione**, spunta *"Use local subscription (warm bridge)"*.
+>
+> Il bridge **non si avvia da solo** insieme all'estensione: va lanciato a mano ogni volta. Se dimentichi il passo 2 (o il bridge si è chiuso), il popup mostra un avviso ⚠ **lampeggiante** finché non lo avvii e non torna raggiungibile.
+
 **Prerequisiti (una tantum):**
 
 1. installa Claude Code e accedi una volta: `claude` (oppure `claude login`). La CLI conserva le credenziali dell'abbonamento; il bridge non gestisce alcun token.
@@ -192,6 +199,13 @@ In the popup you choose the Claude model — **Haiku** (fastest/cheapest), **Son
 ### Warm bridge (use your Claude subscription)
 
 `bridge/warm-bridge.js` is a tiny local HTTP server that exposes the same shape as the Anthropic Messages API but, behind the scenes, invokes the **Claude Code** CLI — so you use your **subscription** instead of a metered API key. Each request spawns an independent `claude -p` process (one-shot, in parallel).
+
+> ⚡ **TL;DR — what you need to start/configure:**
+> 1. **Install and log in to Claude Code** (one time): `claude login`.
+> 2. **Start the bridge** every session, in a terminal you leave running: `node bridge/warm-bridge.js`.
+> 3. **In the extension popup**, check *"Use local subscription (warm bridge)"*.
+>
+> The bridge does **not** start on its own together with the extension — you have to launch it by hand each time. If you forget step 2 (or the bridge process died), the popup shows a **blinking** ⚠ warning until you start it and it becomes reachable again.
 
 **Prerequisites (one time):**
 

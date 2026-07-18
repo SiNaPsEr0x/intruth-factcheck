@@ -14,6 +14,7 @@ const apiKeyField = document.getElementById('apiKeyField');
 const cacheListEl  = document.getElementById('cacheList');
 const cacheTotalEl = document.getElementById('cacheTotal');
 const cacheClearEl = document.getElementById('cacheClearBtn');
+const bridgeWarningEl = document.getElementById('bridgeWarning');
 
 // ── I18N — popup UI labels follow the browser language (it/en) ───────────────
 // Content language (transcript/verdicts) is handled elsewhere; this is UI only.
@@ -25,6 +26,7 @@ const P_I18N = {
     btnStart: 'Start Fact-Checking',
     btnStop: 'Stop Fact-Checking',
     hintBridge: 'Using local subscription bridge.',
+    bridgeWarnText: '⚠ Bridge not running — start it (see README).',
     hintEnterKey: 'Enter your Anthropic API key to start.',
     hintKeySaved: 'Key saved.',
     hintNeedKey: 'Please enter your Anthropic API key.',
@@ -56,6 +58,7 @@ const P_I18N = {
     btnStart: 'Avvia il Fact-Checking',
     btnStop: 'Ferma il Fact-Checking',
     hintBridge: 'Bridge locale (abbonamento) in uso.',
+    bridgeWarnText: '⚠ Bridge non avviato — avvialo (vedi README).',
     hintEnterKey: 'Inserisci la tua API key Anthropic per iniziare.',
     hintKeySaved: 'Chiave salvata.',
     hintNeedKey: 'Inserisci la tua API key Anthropic.',
@@ -151,10 +154,40 @@ useBridgeEl.addEventListener('change', () => {
   updateHint();
 });
 
+// ── Bridge reachability check (blinking warning if bridge mode is on but the
+// local warm-bridge.js process isn't running) ────────────────────────────────
+const BRIDGE_HEALTH_URL = 'http://127.0.0.1:8787/health';
+let bridgePollTimer = null;
+
+async function isBridgeReachable() {
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 1200);
+    const res = await fetch(BRIDGE_HEALTH_URL, { signal: ctrl.signal });
+    clearTimeout(timer);
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+async function refreshBridgeWarning() {
+  if (!useBridgeEl.checked) { bridgeWarningEl.hidden = true; return; }
+  bridgeWarningEl.hidden = await isBridgeReachable();
+}
+
 function updateBridgeUI() {
   // In bridge mode the extension talks to the local warm bridge using your
   // subscription, so the API key field is not required.
   apiKeyField.style.display = useBridgeEl.checked ? 'none' : 'flex';
+
+  if (useBridgeEl.checked) {
+    refreshBridgeWarning();
+    if (!bridgePollTimer) bridgePollTimer = setInterval(refreshBridgeWarning, 4000);
+  } else {
+    bridgeWarningEl.hidden = true;
+    if (bridgePollTimer) { clearInterval(bridgePollTimer); bridgePollTimer = null; }
+  }
 }
 
 function updateHint() {
