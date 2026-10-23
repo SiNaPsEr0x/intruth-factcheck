@@ -32,7 +32,7 @@ test('sources reject executable protocols, credentials and duplicates', () => {
 });
 
 test('CLI integration handles stdin, final JSON and actual search events', async () => {
-  assert.equal(await checkCli(command), '0.163.0');
+  assert.equal(await checkCli(command), '0.164.0');
   const runner = createRunner({ command });
   const fast = await runner(payload);
   assert.equal(fast.model, 'gpt-6-luna');

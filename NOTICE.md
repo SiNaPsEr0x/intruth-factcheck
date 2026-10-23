@@ -8,12 +8,13 @@ InTruth was created by **Risha Panigrahi**.
   docs/MIGRATION.md. The original custom, noncommercial license remains in
   LICENSE. No license conversion is implied by this adaptation.
 
-The vendored Transformers.js bundle identifies itself as version 4.2.0.
+The vendored Transformers.js bundle is version 4.3.1, rebuilt against stable ONNX Runtime Web 1.30.0.
+Build details and pinned sources: docs/SOFTWARE.md.
 Transformers.js is an Apache-2.0 project:
 https://github.com/huggingface/transformers.js/blob/main/LICENSE
 
-The ONNX Runtime Web JavaScript/WASM assets are retained from the input
-repository. ONNX Runtime is an MIT-licensed project:
+The ONNX Runtime Web JavaScript/WASM assets are the matching stable 1.30.0 JSEP pair, replacing the input
+repository’s older asyncify assets. ONNX Runtime is an MIT-licensed project:
 https://github.com/microsoft/onnxruntime/blob/main/LICENSE
 
 Whisper and optional MarianMT model weights are downloaded separately from

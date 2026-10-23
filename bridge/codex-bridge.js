@@ -12,7 +12,7 @@ const { DEFAULT_MODEL, modelId, validateClaims } = require('../realtime-factchec
 const SCHEMA = path.join(__dirname, 'claims.schema.json');
 const MAX_BODY = 128 * 1024;
 const MAX_OUTPUT = 4 * 1024 * 1024;
-const MIN_CODEX = '0.163.0';
+const MIN_CODEX = '0.164.0';
 const ISOLATION = [
   '--ignore-user-config', '--ignore-rules',
   '-c', 'project_doc_max_bytes=0',
@@ -31,7 +31,10 @@ function positiveInt(value, fallback, name) {
 }
 
 // Resolve npm's Windows wrapper to JS; never send prompts through a shell.
-function resolveCommand(binary = process.env.CODEX_BIN || 'codex') {
+function resolveCommand(binary = process.env.CODEX_BIN) {
+  const local = path.join(__dirname, '..', 'node_modules', '@openai', 'codex', 'bin', 'codex.js');
+  if (!binary && fs.existsSync(local)) return { bin: process.execPath, prefix: [local] };
+  binary ||= 'codex';
   const candidates = path.isAbsolute(binary) || /[/\\]/.test(binary)
     ? [path.resolve(binary)]
     : (process.env.PATH || '').split(path.delimiter).flatMap(dir =>
@@ -41,8 +44,11 @@ function resolveCommand(binary = process.env.CODEX_BIN || 'codex') {
   for (const candidate of candidates) {
     if (!fs.existsSync(candidate)) continue;
     if (/\.(cmd|bat)$/i.test(candidate)) {
-      const entry = path.join(path.dirname(candidate), 'node_modules', '@openai', 'codex', 'bin', 'codex.js');
-      if (!fs.existsSync(entry)) throw new Error('Set CODEX_BIN to codex.exe or @openai/codex/bin/codex.js.');
+      const entry = [
+        path.join(path.dirname(candidate), 'node_modules', '@openai', 'codex', 'bin', 'codex.js'),
+        path.join(path.dirname(candidate), '..', '@openai', 'codex', 'bin', 'codex.js'),
+      ].find(file => fs.existsSync(file));
+      if (!entry) throw new Error('Set CODEX_BIN to codex.exe or @openai/codex/bin/codex.js.');
       return { bin: process.execPath, prefix: [entry] };
     }
     return /\.[cm]?js$/i.test(candidate)
@@ -135,7 +141,7 @@ async function checkCli(command) {
   const match = version.stdout.match(/(\d+)\.(\d+)\.(\d+)/);
   if (!match) throw new Error('Unable to determine Codex CLI version.');
   const parts = match.slice(1).map(Number);
-  if (parts[0] === 0 && parts[1] < 163) throw new Error(`Codex CLI >= ${MIN_CODEX} is required; update @openai/codex.`);
+  if (parts[0] === 0 && parts[1] < 164) throw new Error(`Codex CLI >= ${MIN_CODEX} is required; update @openai/codex.`);
   await runProcess(command, ['login', 'status'], { timeout: 10000 });
   return match[0];
 }
@@ -208,7 +214,7 @@ function createBridge({ runner, model = DEFAULT_MODEL, maxConcurrent = 2, allowe
 
 async function main() {
   const commandName = process.argv[2] || 'start';
-  if (!['start', 'check', 'verify'].includes(commandName)) throw new Error('Usage: node bridge/codex-bridge.js [start|check|verify]');
+  if (!['start', 'check', 'verify', 'verify-web'].includes(commandName)) throw new Error('Usage: node bridge/codex-bridge.js [start|check|verify|verify-web]');
   const model = modelId(process.env.CODEX_MODEL || DEFAULT_MODEL);
   const command = resolveCommand();
   const readiness = { ready: false };
@@ -221,11 +227,15 @@ async function main() {
   }
   const runner = createRunner({ command, model, effort: process.env.CODEX_REASONING_EFFORT || 'low',
     timeout: positiveInt(process.env.REQ_TIMEOUT, 120000, 'REQ_TIMEOUT') });
-  if (commandName === 'verify') {
+  if (commandName === 'verify' || commandName === 'verify-web') {
     if (!readiness.ready) throw new Error(readiness.error);
-    await runner({ prompt: 'No factual claims: return an empty claims array.',
-      instructions: 'Return {"claims": []}.', webSearch: false });
-    console.log(`Codex live verification passed for ${model}.`);
+    const webSearch = commandName === 'verify-web';
+    const result = await runner({ prompt: webSearch ? 'Use web search to find NASA evidence that Earth orbits the Sun. Verify this single claim with the source URL.' : 'No factual claims: return an empty claims array.',
+      instructions: webSearch ? 'Perform native web search. Return one schema-valid claim with the NASA source you actually found.' : 'Return {"claims": []}.', webSearch });
+    if (webSearch && (result.claims.length !== 1 || !result.claims[0].sources.length)) {
+      throw new Error('The web-search probe did not return a claim supported by a source.');
+    }
+    console.log(`Codex live ${webSearch ? 'web-search ' : ''}verification passed for ${model}.`);
     return;
   }
   const port = positiveInt(process.env.BRIDGE_PORT, 8787, 'BRIDGE_PORT');

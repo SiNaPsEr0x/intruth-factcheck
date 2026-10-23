@@ -35,3 +35,17 @@ entry point; it invokes the new Codex implementation. Replace old shortcuts with
 The original license and author attribution are retained. The extension remains
 focused on the originally supported YouTube/Jubilee sites; no all-sites browsing
 permission was added.
+
+## Stable software refresh (2.1.0)
+
+- Updated Codex CLI to 0.164.0, Transformers.js to 4.3.1 and ONNX Runtime
+  Web/Common to stable 1.30.0; replaced asyncify with the matching JSEP pair.
+- Rebuilt the upstream web-only Transformers bundle instead of shipping its
+  development ORT dependency. Added upstream integrity and artifact checksums.
+- Added exact developer dependencies and package-lock.json, npm 12.2.1 and
+  Node 26.12.1 selectors; the bridge prefers the pinned local Codex CLI.
+- Updated all three GitHub Actions to their latest stable releases and expanded
+  CI to Node 22/24/26 plus native browser tests.
+- Replaced the Python browser script with pinned JavaScript Playwright 1.64.1.
+  Added actual MV3 pipeline and real Whisper/translation inference checks.
+- Updated README, software inventory, validation record, packaging and notices.

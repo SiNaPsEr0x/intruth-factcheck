@@ -14,17 +14,17 @@
 | `src/content/session-export.js` | Final verdict log and self-contained HTML report |
 | `bridge/codex-bridge.js` | Loopback HTTP server, version/login checks, isolated CLI subprocess lifecycle |
 | `bridge/claims.schema.json` | Structured final output contract for Codex |
-| `src/vendor/*` | Retained compatible Transformers.js/ONNX runtime assets |
+| `src/vendor/*` | Reproducible stable Transformers.js 4.3.1 / ONNX 1.30.0 runtime assets |
 
 `src/` in this table means `realtime-factcheck/src/`. No build is needed to load
-the extension; no npm package is needed to run the bridge.
+the extension; the bridge uses Node built-ins; `npm ci` installs the pinned CLI/build/test tools.
 
 ## Protocol v2
 
 `GET http://127.0.0.1:8787/health` returns:
 
 ```json
-{"ok":true,"service":"intruth-codex","protocol":2,"model":"gpt-6-luna","inflight":0,"ready":true,"cliVersion":"0.163.0"}
+{"ok":true,"service":"intruth-codex","protocol":2,"model":"gpt-6-luna","inflight":0,"ready":true,"cliVersion":"0.164.0"}
 ```
 
 `ready` means CLI/version and local login status passed, not that a live model
@@ -86,3 +86,11 @@ execution and exposure but do not certify a complete security isolation boundary
 The recording date is user-supplied or explicit `dateCreated` metadata; upload or
 page-update times are not treated as recording dates. Model conclusions require
 human source review. Generated source links are limited to credential-free HTTP(S).
+
+## Stable build and browser validation
+
+The web-only Transformers distribution is bundled against stable ORT 1.30.0,
+not its upstream development dependency. `npm run vendor` verifies upstream
+integrity and records artifact checksums. See SOFTWARE.md. Native MV3 and real
+ASR/translation browser checks are available through `test:native` and
+`test:whisper`. They do not prove real Codex model access.

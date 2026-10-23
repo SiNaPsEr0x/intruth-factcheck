@@ -4,7 +4,7 @@
 
 Fact-checking di video e dibattiti con **trascrizione Whisper nel browser** e
 **Codex CLI** per analisi e ricerca web. Questa versione usa **`gpt-6-luna`** con
-ragionamento **`low`** come impostazione iniziale, come richiesto. Non usa le API
+ragionamento **`low`** come impostazione iniziale. Non usa le API
 Anthropic e non richiede di incollare chiavi nel popup.
 
 Progetto originale di **Risha Panigrahi**:
@@ -14,21 +14,28 @@ Vedi [LICENSE](LICENSE) e [NOTICE.md](NOTICE.md).
 
 ## Avvio rapido
 
-Servono **Node.js 22+**, **Codex CLI 0.163.0+**, un account con accesso al modello
-e **Chrome/Chromium 116+**. Il bridge deve essere avviato **sullo stesso computer
-del browser**, anche se sviluppi il progetto con Codex nel cloud.
+Versione **2.1.0**, con software aggiornato ai canali **stabili** verificati il
+23 ottobre 2026. Usa **Node.js 26.12.1** (ultima stabile), oppure **24.22.1 LTS**,
+**npm 12.2.1** e Chrome/Chromium stabile aggiornato. Codex CLI **0.164.0** viene
+installato dal lockfile del progetto. Il bridge deve essere avviato **sullo
+stesso computer del browser**, anche se sviluppi il progetto con Codex nel cloud.
 
 ```sh
-npm install -g @openai/codex
-codex login
-git clone https://github.com/SiNaPsEr0x/intruth-factcheck.git
+git clone --branch codex/full-migration https://github.com/SiNaPsEr0x/intruth-factcheck.git
 cd intruth-factcheck
+npm install --global npm@12.2.1
+npm ci
+npm exec -- codex login
 npm run check
+npm run verify
 npm start
 ```
 
-Lascia aperto il terminale del bridge. Il progetto non ha dipendenze npm a runtime:
-non occorre eseguire `npm install` nella cartella del progetto.
+La branch indicata contiene l'adattamento nella PR #6. Dopo il merge puoi usare
+la branch predefinita. Se hai scaricato lo ZIP, estrailo e parti da `npm ci`
+nella cartella con `package.json`. Lascia aperto il terminale del bridge.
+`npm ci` installa le versioni bloccate di CLI e strumenti di sviluppo; i file
+browser già pronti sono inclusi. Non serve ricompilarli per usare l'estensione.
 
 1. Apri `chrome://extensions` e abilita **Modalità sviluppatore**.
 2. Scegli **Carica estensione non pacchettizzata** e seleziona la cartella
@@ -57,11 +64,12 @@ separato chiamato “Light”. Non sono garantite risposte istantanee o tempi fi
 ```sh
 npm run check   # Controlla versione CLI e stato login; non interroga il modello
 npm run verify  # Invia una piccola richiesta REALE al modello, consumando quota
+npm run verify:web  # Prova anche la ricerca web nativa; eseguila dopo verify
 ```
 
 L'avvio del bridge esegue solo il controllo locale. Un login memorizzato può
 comunque essere scaduto: `verify` controlla anche l'accesso effettivo. Se compare
-un errore di token/login, esegui `codex login` nel tuo terminale e riavvia il bridge.
+un errore di token/login, esegui `npm exec -- codex login` nel tuo terminale e riavvia il bridge.
 Se il modello non è disponibile, scegli un ID autorizzato per il tuo account.
 
 ## Come funziona
@@ -100,7 +108,7 @@ contesto corretto; in sua assenza il modello non può ricostruirla con certezza.
 
 | Variabile | Default | Significato |
 | --- | --- | --- |
-| `CODEX_BIN` | `codex` nel PATH | Eseguibile Codex o percorso a `bin/codex.js` |
+| `CODEX_BIN` | CLI locale del progetto, poi `codex` nel PATH | Eseguibile Codex o percorso a `bin/codex.js`; override esplicito |
 | `CODEX_MODEL` | `gpt-6-luna` | Modello predefinito per bridge/check/verify; il popup invia il suo ID selezionato |
 | `CODEX_REASONING_EFFORT` | `low` | Livello supportato dal modello scelto |
 | `REQ_TIMEOUT` | `120000` | Timeout della CLI in millisecondi |
@@ -133,34 +141,79 @@ vecchie impostazioni della chiave Anthropic e i modelli Claude vengono migrati a
 conserva transcript o sessioni su file propri e cancella i suoi file temporanei;
 questo non implica assenza di conservazione lato servizio.
 
-## Sviluppo con Codex e verifiche
+## Versioni stabili e controlli
+
+| Componente | Versione |
+| --- | --- |
+| Node.js / npm | 26.12.1 / 12.2.1 |
+| Codex CLI | 0.164.0 |
+| Transformers.js | 4.3.1 |
+| ONNX Runtime Web/Common | 1.30.0 |
+| esbuild / Playwright | 0.28.2 / 1.64.1 |
+| Chrome stabile usato nei test | 156.0.8078.47 |
+
+Il bundle browser è ricostruito contro **ONNX stabile 1.30.0**: il bundle
+universale upstream di Transformers.js include invece una dipendenza ONNX di
+sviluppo. Non viene distribuita quella versione dev. JavaScript e WASM sono
+aggiornati insieme, con checksum e licenze. Dettagli e fonti delle versioni:
+[SOFTWARE.md](docs/SOFTWARE.md).
+
+Verifiche eseguite su questa versione:
+
+- **17 test automatici**: protocollo, processi, errori, code, audio e isolamento
+  delle sessioni; Codex è simulato in questi test.
+- **Interfaccia e MV3 nativa**: popup, storage, permessi di origine del bridge,
+  content script, worker, card e stop. Il modello è simulato.
+- **Whisper reale nell'estensione**: audio pubblico di riferimento riconosciuto
+  correttamente su CPU/WASM, sotto la CSP dell'estensione.
+- **Traduzione reale inglese → italiano**: «La Terra orbita intorno al Sole.»
+- Controlli di sintassi, checksum, versioni stabili, archivio ZIP e `npm audit`.
+
+La verifica **reale di Codex/Luna** è ancora bloccata in questo ambiente da un
+token di accesso non rinnovabile. Non è una prova di funzionamento del modello:
+sul tuo PC esegui login, `npm run verify` e poi `npm run verify:web`.
+La cattura dell'audio della tua scheda tramite gesto dell'utente e WebGPU sulla
+tua GPU richiedono una prova locale. Vedi [risultati](docs/VALIDATION.md).
+
+## Sviluppo con Codex
 
 Apri la cartella in Codex. [AGENTS.md](AGENTS.md) contiene le istruzioni del
 progetto e `.codex/config.toml` seleziona Luna/low per gli ambienti che supportano
-la configurazione di progetto. Puoi anche avviare esplicitamente:
+la configurazione di progetto.
 
 ```sh
-codex --model gpt-6-luna -c 'model_reasoning_effort="low"'
+npm ci --ignore-scripts
+npm run versions
+npm outdated
 npm test
 npm run lint
+npm exec -- playwright install chromium
+npm run test:browser
+npm run test:native
+npm run test:whisper
 npm run package
 ```
 
-`npm run package` produce `dist/intruth-codex-extension.zip` (da estrarre prima
-di caricarlo in Chrome) e `dist/intruth-codex-source.zip` (progetto completo).
-I test Node usano una CLI simulata, senza login o richieste a pagamento.
-Il controllo facoltativo `python tests/browser-smoke.py` richiede Playwright
-Python e Chromium: prova popup/overlay in Chromium con API Chrome e bridge simulati e porta 8787
-libera. Non testa la cattura audio reale né l'accesso al modello.
+I test browser ora usano Playwright **JavaScript bloccato nel lockfile**: non
+servono Python o un Playwright Python installato separatamente. Le prove UI/MV3
+usano la porta 8787 libera e una CLI simulata. `test:whisper` scarica un campione
+pubblico e i modelli, fa inferenza reale, e non chiama Codex.
+`CHROMIUM_BIN` permette di scegliere un browser stabile installato.
+
+Per ricostruire i bundle dopo un aggiornamento approvato usa `npm run vendor`;
+non modificare a mano i file minificati. `npm run package` produce
+`dist/intruth-codex-extension.zip` (da estrarre prima di caricarlo in Chrome) e
+`dist/intruth-codex-source.zip` (progetto completo con lockfile e configurazione).
+La CI controlla Node 22/24/26, riproducibilità dei bundle e UI/MV3 nel browser.
 
 Dettagli: [architettura](docs/ARCHITECTURE.md), [migrazione](docs/MIGRATION.md),
-[risultati e limiti delle verifiche](docs/VALIDATION.md).
+[software](docs/SOFTWARE.md), [validazione](docs/VALIDATION.md).
 
 ## Problemi comuni
 
 - **Bridge non raggiungibile:** esegui `npm start` sul PC del browser. Un server
   avviato nel cloud o in un container senza inoltro porta non è il tuo localhost.
-- **Token scaduto o modello non disponibile:** esegui `codex login`, poi
+- **Token scaduto o modello non disponibile:** esegui `npm exec -- codex login`, poi
   `npm run verify`. Il bridge non effettua fallback su un altro modello.
 - **Estensione aggiornata ma pagina non risponde:** ricarica l'estensione in
   `chrome://extensions` e la pagina video. Non funziona su pagine interne Chrome.
@@ -177,12 +230,18 @@ native live web search. Its configured default is **`gpt-6-luna`**, reasoning
 **`low`**. Account access to that exact model must be verified; no invented
 “light/latest” aliases or silent model fallbacks are used.
 
-Install Node.js 22+, Codex CLI 0.163.0+, run `codex login`, then `npm run check`
-and `npm start` from this repository. Keep the bridge running **on the browser's
-computer**. In `chrome://extensions`, enable Developer mode and load the
-`realtime-factcheck` folder unpacked. Reload a supported YouTube/Jubilee tab,
-open InTruth, select the spoken language and Whisper size, optionally enter the
-recording date, and start. The extension does not request an API key.
+Version 2.1.0 uses stable releases checked on 2026-10-23: Node 26.12.1
+(or 24.22.1 LTS), npm 12.2.1, Codex CLI 0.164.0, Transformers.js 4.3.1,
+stable ONNX Runtime 1.30.0, esbuild 0.28.2 and Playwright 1.64.1.
+The browser bundle is rebuilt to avoid upstream's development ORT dependency.
+See [software versions](docs/SOFTWARE.md).
+
+Clone branch `codex/full-migration` (PR #6), run `npm ci`,
+`npm exec -- codex login`, `npm run check`, `npm run verify`, then `npm start`.
+Keep the bridge running **on the browser's computer**. In `chrome://extensions`,
+enable Developer mode and load `realtime-factcheck` unpacked. Reload a supported
+YouTube/Jubilee tab, select language/Whisper size and optional recording date,
+and start. The popup does not request an API key.
 
 `npm run verify` sends a small real inference request. `check` only verifies CLI
 version and locally stored login status, which may still have expired. If login
@@ -200,10 +259,15 @@ through Codex**. The local bridge does not make LLM inference local. Model
 weights are downloaded from Hugging Face and cached. Codex owns authentication;
 old Anthropic keys are removed from extension storage during migration.
 
-Development: `npm test`, `npm run lint`, `npm run package`. The optional
-`python tests/browser-smoke.py` uses Chromium and Python Playwright with mocked extension APIs and a mock
-bridge; it does not establish real audio/model functionality. See
-[validation](docs/VALIDATION.md) for actual results and remaining checks.
+Development checks: `npm test`, `npm run lint`, `npm run versions`,
+`npm outdated`, `npm run test:browser`, `npm run test:native`,
+`npm run test:whisper`, `npm audit`, `npm run package`.
+Install the browser first with `npm exec -- playwright install chromium`.
+Native extension registration, real Whisper transcription and English/Italian
+translation passed on stable Chrome 156.0.8078.47; the native pipeline's Codex
+responses were simulated. Actual Codex inference remains blocked by this
+environment's expired login. Real tabCapture/user-gesture behavior and hardware
+WebGPU still need local testing. See [validation](docs/VALIDATION.md).
 
 Original author: **Risha Panigrahi**,
 https://github.com/rpanigrahi222/intruth-factcheck.

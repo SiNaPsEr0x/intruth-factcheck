@@ -1,16 +1,32 @@
 {
   "name": "intruth-codex",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "private": true,
   "description": "On-device transcription and evidence-based fact-checking with Codex CLI",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": "^22.22.2 || ^24.15.0 || >=26.0.0"
+  },
+  "packageManager": "npm@12.2.1",
   "scripts": {
     "start": "node bridge/codex-bridge.js",
     "check": "node bridge/codex-bridge.js check",
     "verify": "node bridge/codex-bridge.js verify",
+    "verify:web": "node bridge/codex-bridge.js verify-web",
     "test": "node --test",
+    "test:browser": "node scripts/browser-smoke.cjs",
+    "test:native": "node scripts/native-smoke.cjs",
+    "test:whisper": "node scripts/whisper-smoke.cjs",
+    "vendor": "node scripts/vendor.mjs",
+    "versions": "node scripts/versions.cjs",
     "lint": "node scripts/check.js",
     "package": "node scripts/package.js"
   },
-  "license": "SEE LICENSE IN LICENSE"
+  "license": "SEE LICENSE IN LICENSE",
+  "devDependencies": {
+    "@openai/codex": "0.164.0",
+    "esbuild": "0.28.2",
+    "onnxruntime-common": "1.30.0",
+    "onnxruntime-web": "1.30.0",
+    "playwright": "1.64.1"
+  }
 }

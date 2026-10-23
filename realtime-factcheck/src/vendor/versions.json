@@ -1,0 +1,11 @@
+{
+  "transformers": "4.3.1",
+  "onnxruntime": "1.30.0",
+  "transformerPackageIntegrity": "sha512-5+voSeUCFK6PCKlY15dPhNOKq3/zOTxDN7oC+Wy9dFb1QZ0TSQomZRRy7URRK8YRuUoE9fGMQTTPC5d/pWBJhA==",
+  "policy": "Stable releases only; web bundle rebuilt against stable ONNX Runtime.",
+  "files": {
+    "transformers.min.js": "bb67dacc4e25c5f35158088189a26cbc4ae3cc585c080e59c95a57d2ba20828a",
+    "ort-wasm-simd-threaded.jsep.mjs": "709853412fd1ffc34247af1e73569227b5b79629c5ca3f59cc39cf7e500e4947",
+    "ort-wasm-simd-threaded.jsep.wasm": "3ad23231b5bd6d9dda55a7f84606315e0bf35b6750c28ee993c987c54cacab0f"
+  }
+}

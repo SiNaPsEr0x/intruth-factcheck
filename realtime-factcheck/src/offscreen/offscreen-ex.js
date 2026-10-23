@@ -8,7 +8,7 @@ import { env, pipeline, WhisperTextStreamer } from '../vendor/transformers.min.j
 
 // ── Transformers.js / ONNX Runtime setup ─────────────────────────────────────
 // MV3 CSP forbids remote scripts, so the ONNX Runtime Web wasm is vendored
-// locally under src/vendor/. Pin the exact files — the "asyncify" build ships
+// locally under src/vendor/. Pin the exact files — the "jsep" build ships
 // the WebGPU execution provider and also runs the plain CPU-wasm fallback.
 env.allowLocalModels = false; // model weights are fetched from HuggingFace
 // Point ORT at the vendored wasm (defensive optional-chaining so a not-yet
@@ -17,8 +17,8 @@ env.allowLocalModels = false; // model weights are fetched from HuggingFace
 env.backends.onnx ??= {};
 env.backends.onnx.wasm ??= {};
 env.backends.onnx.wasm.wasmPaths = {
-  mjs:  chrome.runtime.getURL('src/vendor/ort-wasm-simd-threaded.asyncify.mjs'),
-  wasm: chrome.runtime.getURL('src/vendor/ort-wasm-simd-threaded.asyncify.wasm'),
+  mjs:  chrome.runtime.getURL('src/vendor/ort-wasm-simd-threaded.jsep.mjs'),
+  wasm: chrome.runtime.getURL('src/vendor/ort-wasm-simd-threaded.jsep.wasm'),
 };
 // An offscreen document is not cross-origin isolated, so SharedArrayBuffer is
 // unavailable and ORT must stay single-threaded (WebGPU does the heavy lifting).
