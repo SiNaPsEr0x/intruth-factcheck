@@ -1,3 +1,11 @@
-# Claude OAuth token saved internally by the warm bridge — never commit this
-bridge/.claude-oauth-token
-.claude-oauth-token
+# Local credentials and generated artifacts
+.env
+.env.*
+!.env.example
+.codex/auth.json
+node_modules/
+dist/
+__pycache__/
+*.log
+.DS_Store
+Thumbs.db

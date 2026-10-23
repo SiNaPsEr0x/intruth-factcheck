@@ -133,6 +133,9 @@ let active        = false;
 let audio           = new Float32Array(0);
 let inferenceTimer  = null;
 let busy            = false;
+let captureEpoch = 0;
+let audioEndSample = 0;
+let lastVoiceSample = 0;
 
 // VAD state
 let lastVoiceTime        = 0;
@@ -204,6 +207,7 @@ async function ensureModel(modelId) {
 async function startCapture(streamId, lang = 'en', modelSize) {
   if (active) stopCapture();
   active = true;
+  const epoch = ++captureEpoch;
   language = lang;
 
   // A tabCapture stream ID is single-use and short-lived; an empty/expired one
@@ -235,7 +239,8 @@ async function startCapture(streamId, lang = 'en', modelSize) {
   // 2) Wire up the audio graph now so the user keeps hearing the tab (capturing
   //    the stream mutes the tab's own playback until we reconnect it) while the
   //    model loads. PCM batches buffer harmlessly until the inference loop starts.
-  await startAudioPipeline();
+  if (!active || epoch !== captureEpoch) { stopCapture(); throw new Error('Capture cancelled.'); }
+  try { await startAudioPipeline(); } catch (error) { stopCapture(); throw error; }
 
   // 3) Load Whisper — this is the slow part, and it no longer holds the token.
   const modelId = MODEL_IDS[modelSize] || MODEL_IDS.base;
@@ -245,7 +250,7 @@ async function startCapture(streamId, lang = 'en', modelSize) {
     stopCapture();
     throw new Error(`Whisper model load failed: ${err.name || 'Error'} — ${err.message || err}`);
   }
-  if (!active) { stopCapture(); return; } // stopped while the model was still loading
+  if (!active || epoch !== captureEpoch) throw new Error('Capture cancelled.'); // stopped while the model was still loading
 
   // 4) Drop the audio buffered during model load so the first pass isn't a huge
   //    backlog, then start transcribing.
@@ -282,6 +287,7 @@ async function startAudioPipeline() {
 }
 
 function appendAudio(chunk) {
+  audioEndSample += chunk.length;
   // energy-based VAD: track when we last heard speech
   let sum = 0;
   for (let i = 0; i < chunk.length; i++) sum += chunk[i] * chunk[i];
@@ -289,6 +295,7 @@ function appendAudio(chunk) {
   if (rms > SILENCE_RMS) {
     lastVoiceTime = Date.now();
     hasSpeechSinceCommit = true;
+    lastVoiceSample = audioEndSample;
   }
 
   // append to the rolling buffer, capping at MAX_SAMPLES (drop oldest)
@@ -318,12 +325,15 @@ async function runInference() {
   const shouldCommit = hasSpeechSinceCommit && (silenceMs >= SILENCE_COMMIT_MS || bufferFull);
 
   busy = true;
+  const epoch = captureEpoch;
+  const snapshotEnd = audioEndSample;
   const snapshot = audio; // transcribe the current window
   try {
     let streamed = '';
     const streamer = new WhisperTextStreamer(transcriber.tokenizer, {
       skip_prompt: true,
       callback_function: (token) => {
+        if (!active || epoch !== captureEpoch) return;
         streamed += token;
         // stream partial text as interim while decoding (skip during a commit —
         // the final text is emitted once below)
@@ -342,6 +352,7 @@ async function runInference() {
       task: 'transcribe',
       streamer,
     });
+    if (!active || epoch !== captureEpoch) return;
     const text = (out?.text ?? streamed).trim();
 
     if (shouldCommit) {
@@ -350,7 +361,8 @@ async function runInference() {
         // the original language (translating every pass would add latency);
         // the committed line replaces it with the translated version.
         const shown = await toBrowserLang(text);
-        // Whisper does not diarize; speaker is null and Claude attributes it
+        if (!active || epoch !== captureEpoch) return;
+        // Whisper does not diarize; speaker is null and Codex attributes it
         // from the surrounding context (speaker names / page title).
         chrome.runtime.sendMessage({
           type: 'TRANSCRIPT_RESULT', text: shown, isFinal: true, interim: false, speaker: null,
@@ -359,15 +371,16 @@ async function runInference() {
       }
       // drop the committed window but keep any audio that streamed in during
       // inference (snapshot is a prefix of the current buffer); reset the VAD.
-      audio = audio.length > snapshot.length ? audio.slice(snapshot.length) : new Float32Array(0);
-      hasSpeechSinceCommit = false;
-      lastVoiceTime = Date.now();
+      const bufferStart = audioEndSample - audio.length;
+      audio = audio.slice(Math.max(0, snapshotEnd - bufferStart));
+      hasSpeechSinceCommit = lastVoiceSample > snapshotEnd;
     } else if (text) {
       chrome.runtime.sendMessage({
         type: 'TRANSCRIPT_RESULT', text, isFinal: false, interim: true, speaker: null,
       }).catch(() => {});
     }
   } catch (err) {
+    if (!active || epoch !== captureEpoch) return;
     const detail = err && err.name ? `${err.name}: ${err.message}` : String(err);
     // "token_ids must be a non-empty array of integers" — benign: the decoder
     // produced no tokens for a (near-)silent window. Skip this pass quietly.
@@ -378,12 +391,15 @@ async function runInference() {
       chrome.runtime.sendMessage({ type: 'PIPELINE_ERROR', message: 'Transcription error: ' + detail }).catch(() => {});
     }
   } finally {
-    busy = false;
+    if (epoch === captureEpoch) busy = false;
   }
 }
 
 function stopCapture() {
   active = false;
+  captureEpoch++;
+  audioEndSample = 0;
+  lastVoiceSample = 0;
   if (inferenceTimer) { clearInterval(inferenceTimer); inferenceTimer = null; }
   audio = new Float32Array(0);
   busy = false;
@@ -400,7 +416,7 @@ function stopCapture() {
   }
 
   if (audioContext) {
-    audioContext.close();
+    audioContext.close().catch(() => {});
     audioContext = null;
   }
 

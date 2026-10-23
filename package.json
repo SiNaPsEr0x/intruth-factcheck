@@ -1,0 +1,16 @@
+{
+  "name": "intruth-codex",
+  "version": "2.0.0",
+  "private": true,
+  "description": "On-device transcription and evidence-based fact-checking with Codex CLI",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "start": "node bridge/codex-bridge.js",
+    "check": "node bridge/codex-bridge.js check",
+    "verify": "node bridge/codex-bridge.js verify",
+    "test": "node --test",
+    "lint": "node scripts/check.js",
+    "package": "node scripts/package.js"
+  },
+  "license": "SEE LICENSE IN LICENSE"
+}

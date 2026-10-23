@@ -1,287 +1,210 @@
-# InTruth
+# InTruth · Codex
 
-**🌐 [Italiano](#italiano) · [English](#english)**
+**Italiano** · [English](#english)
 
-<img width="400" height="225" alt="InTruth" src="https://github.com/user-attachments/assets/a0a8fba9-c28f-473c-866d-84951a9b548e" />
+Fact-checking di video e dibattiti con **trascrizione Whisper nel browser** e
+**Codex CLI** per analisi e ricerca web. Questa versione usa **`gpt-6-luna`** con
+ragionamento **`low`** come impostazione iniziale, come richiesto. Non usa le API
+Anthropic e non richiede di incollare chiavi nel popup.
 
----
+Progetto originale di **Risha Panigrahi**:
+https://github.com/rpanigrahi222/intruth-factcheck.
+Adattamento del repository https://github.com/SiNaPsEr0x/intruth-factcheck.
+Vedi [LICENSE](LICENSE) e [NOTICE.md](NOTICE.md).
 
-## Italiano
+## Avvio rapido
 
-ciao a tutti!
+Servono **Node.js 22+**, **Codex CLI 0.163.0+**, un account con accesso al modello
+e **Chrome/Chromium 116+**. Il bridge deve essere avviato **sullo stesso computer
+del browser**, anche se sviluppi il progetto con Codex nel cloud.
 
-InTruth è un **fact-checker in tempo reale** per dibattiti live, discorsi, interviste, conferenze stampa ed eventi politici. Ascolta l'audio della scheda attiva del browser, individua le affermazioni fattuali mentre vengono pronunciate e fornisce verdetti immediati basati su evidenze, usando l'analisi di un modello linguistico e la ricerca sul web. La maggior parte dei fact-check ufficiali esce giorni dopo il dibattito — qui puoi valutare le affermazioni **mentre** vengono fatte.
+```sh
+npm install -g @openai/codex
+codex login
+git clone https://github.com/SiNaPsEr0x/intruth-factcheck.git
+cd intruth-factcheck
+npm run check
+npm start
+```
 
-Fa parte di un progetto di ricerca più ampio che studia come l'inganno nel discorso politico sia prosodicamente / linguisticamente diverso dall'inganno in altri contesti (parlato letto / preparato), quindi… ci sarà altro in arrivo!
+Lascia aperto il terminale del bridge. Il progetto non ha dipendenze npm a runtime:
+non occorre eseguire `npm install` nella cartella del progetto.
 
-### Novità principali
+1. Apri `chrome://extensions` e abilita **Modalità sviluppatore**.
+2. Scegli **Carica estensione non pacchettizzata** e seleziona la cartella
+   **`realtime-factcheck`**, non la radice del repository.
+3. Apri o ricarica una pagina video di **YouTube** o **Jubilee**.
+4. Apri il popup InTruth: il modello iniziale è `gpt-6-luna`.
+5. Scegli Whisper `tiny`, `base` o `small`, la lingua e, se nota, la vera data di
+   registrazione del discorso. `auto` rileva la lingua; i risultati seguono la
+   lingua del browser (italiano/inglese).
+6. Quando il bridge risulta collegato, premi **Avvia il Fact-Checking**.
 
-- **Trascrizione on-device con Whisper (WebGPU)** — la trascrizione ora gira interamente nel tuo browser tramite Whisper (ONNX) su WebGPU, con Transformers.js. Niente servizi cloud di speech-to-text, niente chiave STT. (Deepgram è stato rimosso.)
-- **Due modi per usare il modello** — la tua **API key Anthropic** (bring-your-own-key) *oppure* il tuo **abbonamento Claude** tramite un piccolo bridge locale (`warm-bridge.js`) e la CLI di Claude Code.
-- **Supporto multilingua** — funziona su dibattiti in una qualunque delle lingue selezionabili; interfaccia dell'overlay ed export localizzati in italiano/inglese.
+Al primo utilizzo Whisper scarica i pesi da Hugging Face; il popup mostra la cache
+e permette di svuotarla. WebGPU è preferibile; è previsto un fallback CPU/WASM.
+Le trascrizioni automatiche possono contenere errori: controlla il testo originale.
 
-### Come funziona
+### Il modello richiesto
 
-1. l'audio della scheda attiva viene catturato (`tabCapture`)
-2. l'audio viene trascritto **localmente** con Whisper (WebGPU → fallback CPU)
-3. dal parlato vengono estratte le affermazioni fattuali *check-worthy*
-4. ogni affermazione viene valutata in due passate: una **veloce** (dalla conoscenza del modello, mostra subito una card "in verifica…") e una **verificata** che ricontrolla l'affermazione contro fonti web
-5. verdetti, spiegazioni e fonti compaiono nell'overlay mentre il dibattito è ancora in corso
+`gpt-6-luna` è l'identificatore scelto per questa configurazione, **non una garanzia
+che ogni account Codex vi abbia accesso**. Il progetto non inventa alias come
+`luna-light-latest` e non cambia modello in silenzio. Puoi inserire nel popup un
+altro identificatore esatto disponibile per il tuo account.
 
-**Pipeline audio:** `tabCapture` → `AudioWorklet` (`pcm-worklet.js`, sostituisce il deprecato ScriptProcessorNode) → VAD a energia con finestra scorrevole (max 30 s) → testo interim/finale in streaming. L'audio del video continua a sentirsi normalmente.
+`low` è il livello di ragionamento configurato nel bridge; non è un modello
+separato chiamato “Light”. Non sono garantite risposte istantanee o tempi fissi.
 
-### Funzionalità
+```sh
+npm run check   # Controlla versione CLI e stato login; non interroga il modello
+npm run verify  # Invia una piccola richiesta REALE al modello, consumando quota
+```
 
-- **Rilevamento affermazioni in tempo reale**: monitora il parlato della scheda attiva e individua affermazioni fattuali verificabili mentre vengono fatte.
-- **Valutazione in tempo reale**: analizza la veridicità con un modello linguistico e fonti esterne, assegnando uno di questi verdetti:
-  - **TRUE** (Vero)
-  - **SUBSTANTIALLY TRUE** (Sostanzialmente vero)
-  - **FALSE** (Falso)
-  - **MISLEADING** (Fuorviante)
-  - **UNVERIFIABLE** (Non verificabile)
-  con un livello di confidenza **HIGH / MEDIUM / LOW**.
-- **Attribuzione degli speaker**: nessuna diarizzazione dall'audio; i nomi vengono dedotti dal titolo del video, confermati/modificati da te tramite l'editor nell'overlay, e Claude attribuisce le affermazioni al partecipante corretto dal contesto (linguaggio in prima persona, contenuti di policy, riferimenti incrociati).
-- **Analisi del contesto**: usa la conversazione circostante e il contesto dell'evento per migliorare l'identificazione e ridurre i falsi positivi; tiene conto della **data di registrazione** per valutare le affermazioni con le informazioni disponibili all'epoca.
-- **"Speaker conviction"**: analisi lessicale (hedging, certezza, filler, prima persona, velocità di eloquio…) mostrata per ogni affermazione.
-- **Overlay regolabile**: pannello ancorato a destra a tutta altezza, con maniglia per ridimensionare la larghezza (persistente) e modalità **flottante** trascinabile dalla header con posizione salvata tra le sessioni.
-- **Export della sessione**: un pulsante genera un report **HTML autoconsistente** (`factcheck-report.html`, stampabile in PDF) con riepilogo dei conteggi e card per speaker (verdetto, confidenza, timestamp, fonti). Localizzato.
+L'avvio del bridge esegue solo il controllo locale. Un login memorizzato può
+comunque essere scaduto: `verify` controlla anche l'accesso effettivo. Se compare
+un errore di token/login, esegui `codex login` nel tuo terminale e riavvia il bridge.
+Se il modello non è disponibile, scegli un ID autorizzato per il tuo account.
 
-### Modello e chiavi
+## Come funziona
 
-Nel popup puoi scegliere il modello Claude — **Haiku** (più veloce/economico), **Sonnet** (bilanciato) o **Opus** (più capace) — e come chiamarlo:
+```text
+Audio della scheda → AudioWorklet → Whisper locale → trascrizione
+  → bridge HTTP su 127.0.0.1:8787 → codex exec (gpt-6-luna, low)
+  → prima analisi senza web → verifica con web_search live → overlay e report
+```
 
-- **API key Anthropic** (default): incolli la tua chiave `sk-ant-…` nel popup; la richiesta va direttamente a `api.anthropic.com`.
-- **Abbonamento locale (warm bridge)**: spunti *"Use local subscription (warm bridge)"*; l'estensione parla con `http://127.0.0.1:8787` e nessuna chiave viene richiesta.
+- L'estensione valuta due segmenti finali per volta; un segmento isolato viene
+  elaborato dopo 10 secondi senza un altro segmento finale. Un segmento Whisper
+  può durare fino a circa 30 secondi, oltre al tempo d'inferenza.
+- La prima card è **provvisoria**. La verifica successiva può correggerla in
+  entrambe le direzioni, anche da VERO a FALSO.
+- Senza ricerca eseguita, senza fonti utilizzabili o in caso di errore, la card
+  resta **NON VERIFICABILE**, con confidenza bassa. Una fonte citata può comunque
+  essere errata o irrilevante: consulta i link e valuta l'evidenza.
+- Sono ammessi al massimo tre claim per passata, due richieste CLI contemporanee
+  e una coda limitata. Se Codex resta indietro, metti in pausa il video.
+- Fermare la sessione annulla le richieste. Le risposte vecchie non passano alla
+  scheda della sessione successiva.
+- I nomi dei partecipanti sono contesto modificabile, non diarizzazione audio.
+  Il modello deve usare `Unknown` quando il testo non identifica chi parla.
+- La “convinzione” lessicale descrive il linguaggio e **non misura la verità**;
+  le liste lessicali sono soprattutto inglesi.
+- L'overlay è ridimensionabile e trascinabile. **Esporta** scarica un report HTML
+  autonomo con modello e fonti; aprilo e usa Stampa → Salva come PDF.
+  Le card ancora in attesa non entrano nel report finché non sono finalizzate.
 
-### Warm bridge (usare l'abbonamento Claude)
+La data di caricamento del video non viene usata come data del discorso.
+Inserisci la data di registrazione per verificare affermazioni storiche nel
+contesto corretto; in sua assenza il modello non può ricostruirla con certezza.
 
-`bridge/warm-bridge.js` è un piccolo server HTTP locale che espone la stessa forma della Messages API di Anthropic, ma dietro le quinte invoca la CLI di **Claude Code** — così usi il tuo **abbonamento** invece di una API key a consumo. Ogni richiesta lancia un processo `claude -p` indipendente (one-shot, in parallelo).
+## Configurazione del bridge
 
-> ⚡ **In breve — cosa devi avviare/configurare:**
-> 1. **Installa e autentica Claude Code** (una tantum): `claude login`.
-> 2. **Avvia il bridge** ad ogni sessione, in un terminale che resti aperto: `node bridge/warm-bridge.js`.
-> 3. **Nel popup dell'estensione**, spunta *"Use local subscription (warm bridge)"*.
->
-> Il bridge **non si avvia da solo** insieme all'estensione: va lanciato a mano ogni volta. Se dimentichi il passo 2 (o il bridge si è chiuso), il popup mostra un avviso ⚠ **lampeggiante** finché non lo avvii e non torna raggiungibile.
+| Variabile | Default | Significato |
+| --- | --- | --- |
+| `CODEX_BIN` | `codex` nel PATH | Eseguibile Codex o percorso a `bin/codex.js` |
+| `CODEX_MODEL` | `gpt-6-luna` | Modello predefinito per bridge/check/verify; il popup invia il suo ID selezionato |
+| `CODEX_REASONING_EFFORT` | `low` | Livello supportato dal modello scelto |
+| `REQ_TIMEOUT` | `120000` | Timeout della CLI in millisecondi |
+| `MAX_CONCURRENT` | `2` | Limite processi CLI paralleli |
+| `INTRUTH_EXTENSION_ID` | vuoto | Facoltativo: autorizza solo l'ID della propria estensione |
+| `BRIDGE_PORT` | `8787` | Porta del server; per l'estensione usa 8787, oppure modifica anche `BRIDGE_URL` in `src/shared/protocol.js` e ricaricala |
 
-**Prerequisiti (una tantum):**
+Il client annulla ogni fetch dopo 125 secondi: aumentare solo `REQ_TIMEOUT`
+oltre tale limite non allunga l'attesa dell'estensione. `CODEX_BIN` su Windows
+può indicare `codex.exe` o il launcher `@openai/codex/bin/codex.js`; lo shim npm
+standard viene risolto senza passare il prompt a una shell.
 
-1. installa Claude Code e accedi una volta: `claude` (oppure `claude login`). La CLI conserva le credenziali dell'abbonamento; il bridge non gestisce alcun token.
-2. avvia il bridge: `node bridge/warm-bridge.js` — all'avvio fa un piccolo round-trip reale per confermare che l'autenticazione funzioni.
-3. nel popup dell'estensione spunta *"Use local subscription (warm bridge)"*.
+Il bridge ascolta solo su `127.0.0.1`, controlla Host/Origin, limita dimensioni e
+concorrenza e usa un protocollo InTruth dedicato. La CLI usa sessioni effimere in
+cartelle temporanee, sandbox in sola lettura e shell/app/plugin/hook disabilitati.
+Le configurazioni utente non vengono caricate; l'autenticazione resta gestita da
+Codex. `bridge/warm-bridge.js` è solo un alias compatibile del nuovo avvio.
 
-**Override via variabili d'ambiente (tutte opzionali):** `BRIDGE_PORT` (default 8787), `BRIDGE_HOST` (default 127.0.0.1), `REQ_TIMEOUT` (default 120000 ms), `VERIFY_TIMEOUT` (self-check all'avvio), `CLAUDE_BIN` (percorso della CLI). Endpoint di stato: `GET /health`.
+## Privacy
 
-> `max_tokens` e `temperature` della richiesta vengono ignorati (la CLI `claude -p` non li espone). Questo è uno strumento **personale / di sviluppo**: non è distribuibile ad altri utenti (ognuno avrebbe bisogno di Claude Code + il bridge sul proprio PC).
+L'audio viene elaborato localmente da Whisper. **Il testo della trascrizione, il
+titolo, la data e i claim vengono inviati a OpenAI tramite Codex** per l'analisi;
+la ricerca web coinvolge i servizi di ricerca usati da Codex. Un bridge locale
+non rende locale il modello linguistico. Si applicano condizioni, limiti e
+impostazioni privacy dell'account e del servizio Codex utilizzato.
 
-### Lingue
+Nessuna API key viene salvata nel browser. All'aggiornamento vengono rimosse le
+vecchie impostazioni della chiave Anthropic e i modelli Claude vengono migrati a
+`gpt-6-luna`. I modelli audio restano nella cache dell'estensione. Il bridge non
+conserva transcript o sessioni su file propri e cancella i suoi file temporanei;
+questo non implica assenza di conservazione lato servizio.
 
-16 lingue selezionabili nel popup: `en, es, fr, de, it, pt, nl, hi, ja, zh, ar, ko, ru, pl, sv, tr`. La scelta guida la trascrizione di Whisper e la lingua in cui vengono scritti affermazioni e spiegazioni. L'interfaccia dell'overlay e l'export sono localizzati in **italiano/inglese** in automatico in base a `navigator.language`.
+## Sviluppo con Codex e verifiche
 
-Modelli di trascrizione Whisper selezionabili: **tiny** (più veloce, meno accurato), **base** (bilanciato, consigliato), **small** (più accurato, più pesante). Al primo avvio il modello viene scaricato da HuggingFace e poi resta in cache.
+Apri la cartella in Codex. [AGENTS.md](AGENTS.md) contiene le istruzioni del
+progetto e `.codex/config.toml` seleziona Luna/low per gli ambienti che supportano
+la configurazione di progetto. Puoi anche avviare esplicitamente:
 
-### Cos'è "check-worthy"?
+```sh
+codex --model gpt-6-luna -c 'model_reasoning_effort="low"'
+npm test
+npm run lint
+npm run package
+```
 
-Affermazioni verificabili in questo contesto sono:
-- affermazioni fattuali specifiche
-- statistiche e dati numerici
-- eventi storici
-- azioni e politiche di governo
-- affermazioni scientifiche e mediche
-- fatti documentati e registri pubblici
+`npm run package` produce `dist/intruth-codex-extension.zip` (da estrarre prima
+di caricarlo in Chrome) e `dist/intruth-codex-source.zip` (progetto completo).
+I test Node usano una CLI simulata, senza login o richieste a pagamento.
+Il controllo facoltativo `python tests/browser-smoke.py` richiede Playwright
+Python e Chromium: prova popup/overlay in Chromium con API Chrome e bridge simulati e porta 8787
+libera. Non testa la cattura audio reale né l'accesso al modello.
 
-es.
-- "l'inflazione ha toccato il 9,1% nel 2022."
-- "la legge è passata al Senato nel 2021."
-- "il tasso di disoccupazione è attualmente sotto il 5%."
+Dettagli: [architettura](docs/ARCHITECTURE.md), [migrazione](docs/MIGRATION.md),
+[risultati e limiti delle verifiche](docs/VALIDATION.md).
 
-**NON** lo sono:
-- opinioni
-- previsioni / promesse future
-- domande retoriche
-- giudizi di valore
-- descrizioni soggettive
+## Problemi comuni
 
-es.
-- "questa politica distruggerà l'economia."
-- "ho il piano migliore."
-- "se vince il mio avversario, sarà un disastro."
+- **Bridge non raggiungibile:** esegui `npm start` sul PC del browser. Un server
+  avviato nel cloud o in un container senza inoltro porta non è il tuo localhost.
+- **Token scaduto o modello non disponibile:** esegui `codex login`, poi
+  `npm run verify`. Il bridge non effettua fallback su un altro modello.
+- **Estensione aggiornata ma pagina non risponde:** ricarica l'estensione in
+  `chrome://extensions` e la pagina video. Non funziona su pagine interne Chrome.
+- **Modello audio lento:** prova `tiny`, controlla WebGPU e attendi il download.
+- **Verifica in coda:** pausa il video. Abbonamento e rate limit Codex continuano
+  ad applicarsi; non esiste una quota illimitata garantita dal bridge.
 
-### Come si usa
-
-1. apri un video, una diretta, un dibattito, un'intervista o un discorso
-2. avvia l'estensione e assegna gli speaker con un click
-3. l'audio della scheda attiva viene catturato
-4. il parlato viene trascritto (localmente)
-5. vengono estratte le affermazioni fattuali check-worthy
-6. le affermazioni vengono valutate contro fonti autorevoli
-7. verdetti e spiegazioni vengono mostrati!
-
-### Privacy
-
-Fornisci tu le tue credenziali: non ho accesso ad esse. La trascrizione avviene **localmente** nel tuo browser (Whisper). Con la tua API key, i dati del transcript vengono inviati direttamente al servizio AI da te configurato per generare i fact-check; con il warm bridge la richiesta resta sulla tua macchina (verso la tua CLI Claude Code). Vedi la privacy policy sul web store per i dettagli completi.
-
-### Permessi
-
-- **tabCapture**: cattura l'audio della scheda attiva dopo che avvii esplicitamente una sessione di fact-checking.
-- **activeTab**: interagisce con la scheda selezionata.
-- **storage**: salva **localmente** preferenze e configurazione (chiave, modello, lingua, dimensioni/posizione del pannello).
-- **offscreen**: supporta l'elaborazione audio in background e la trascrizione Whisper.
-
-Host permissions: `api.anthropic.com` (API Claude), `huggingface.co` / `*.hf.co` (download dei modelli Whisper), Google Fonts, e `127.0.0.1:8787` / `localhost:8787` (bridge locale). La CSP abilita `wasm-unsafe-eval` per il runtime ONNX.
-
-> Nota: la ricerca web di supporto (grounding) usa la **ricerca web nativa di Claude** — nessun servizio esterno. Con il warm bridge, la seconda passata invoca `claude -p` con lo strumento `WebSearch` abilitato (l'equivalente di scrivere "cerca con internet"); con l'API diretta usa lo strumento server `web_search` di Anthropic. Non serve alcuna chiave Serper/SerpAPI.
-
-### Limitazioni e avvertenze
-
-Il fact-checking è per natura imperfetto! I verdetti generati possono a volte essere errati, incompleti o basati su informazioni non aggiornate. Se hai dubbi su qualcosa, valutalo in modo indipendente e consulta le fonti originali. Questa estensione è uno **strumento informativo**, NON un'autorità definitiva!
-
-### Requisiti
-
-- Chrome Manifest V3 / browser Chromium moderno con supporto **WebGPU**
-- chiave API AI fornita dall'utente **oppure** Claude Code + `warm-bridge.js` per l'abbonamento locale
-
-### Licenza
-
-vedi la tab della licenza.
-
----
+I risultati sono assistenza informativa e richiedono controllo delle fonti.
 
 ## English
 
-hi everyone!
+InTruth combines local Whisper transcription with **Codex CLI** analysis and
+native live web search. Its configured default is **`gpt-6-luna`**, reasoning
+**`low`**. Account access to that exact model must be verified; no invented
+“light/latest” aliases or silent model fallbacks are used.
 
-InTruth is a **real-time fact-checker** for live debates, speeches, interviews, press conferences, and political events. It listens to audio from the active browser tab, identifies factual claims as they are made, and provides instant evidence-based verdicts using AI analysis and web research. Most fact-checking docs come out days after debates — now you can evaluate claims **as they're made**.
+Install Node.js 22+, Codex CLI 0.163.0+, run `codex login`, then `npm run check`
+and `npm start` from this repository. Keep the bridge running **on the browser's
+computer**. In `chrome://extensions`, enable Developer mode and load the
+`realtime-factcheck` folder unpacked. Reload a supported YouTube/Jubilee tab,
+open InTruth, select the spoken language and Whisper size, optionally enter the
+recording date, and start. The extension does not request an API key.
 
-This is part of a bigger research project assessing how deception in political speech is prosodically / linguistically different than deception in other contexts (rehearsed / read speech), so more to come!
+`npm run verify` sends a small real inference request. `check` only verifies CLI
+version and locally stored login status, which may still have expired. If login
+fails, log in again locally. If the model is unavailable, enter an authorized
+model ID in the popup. Usage and rate limits of your Codex account still apply.
 
-### What's new
+Preliminary answers are explicitly pending. Web evidence may change any verdict
+in either direction; failed searches or missing usable sources result in
+UNVERIFIABLE/LOW. Speaker names are inferred from explicit context, not audio
+diarization. Lexical conviction is not a truthfulness score. Export downloads a
+self-contained HTML report that can be printed to PDF.
 
-- **On-device Whisper transcription (WebGPU)** — transcription now runs entirely in your browser via Whisper (ONNX) on WebGPU, using Transformers.js. No cloud speech-to-text, no STT key. (Deepgram was removed.)
-- **Two ways to run the model** — your own **Anthropic API key** (bring-your-own-key) *or* your **Claude subscription** through a tiny local bridge (`warm-bridge.js`) and the Claude Code CLI.
-- **Multilingual support** — works on debates in any of the selectable languages; the overlay UI and export are localized in English/Italian.
+Audio stays in the browser, but **transcript text and context are sent to OpenAI
+through Codex**. The local bridge does not make LLM inference local. Model
+weights are downloaded from Hugging Face and cached. Codex owns authentication;
+old Anthropic keys are removed from extension storage during migration.
 
-### How it works
+Development: `npm test`, `npm run lint`, `npm run package`. The optional
+`python tests/browser-smoke.py` uses Chromium and Python Playwright with mocked extension APIs and a mock
+bridge; it does not establish real audio/model functionality. See
+[validation](docs/VALIDATION.md) for actual results and remaining checks.
 
-1. audio from the active tab is captured (`tabCapture`)
-2. audio is transcribed **locally** with Whisper (WebGPU → CPU fallback)
-3. check-worthy factual claims are extracted from the speech
-4. each claim is evaluated in two passes: a **fast** pass (from the model's own knowledge, shows a "verifying…" card immediately) and a **grounded** pass that re-checks the claim against web sources
-5. verdicts, explanations, and sources appear in the overlay while the debate is still in progress
-
-**Audio pipeline:** `tabCapture` → `AudioWorklet` (`pcm-worklet.js`, replacing the deprecated ScriptProcessorNode) → energy-based VAD with a sliding window (30 s max) → streaming interim/final text. The video's audio keeps playing normally.
-
-### Features
-
-- **Live claim detection**: continuously monitors speech from the active tab and identifies check-worthy factual claims in real time.
-- **Live claim evaluation**: analyzes veracity with a large language model plus external sources, assigning one of:
-  - **TRUE**
-  - **SUBSTANTIALLY TRUE**
-  - **FALSE**
-  - **MISLEADING**
-  - **UNVERIFIABLE**
-  with a **HIGH / MEDIUM / LOW** confidence level.
-- **Speaker attribution**: no audio diarization; names are inferred from the video title, confirmed/edited by you via the overlay's speaker editor, and Claude attributes claims to the correct participant from context (first-person language, policy content, cross-references).
-- **Context analysis**: uses surrounding conversation and event context to improve claim identification and reduce false positives; it also accounts for the **recording date**, evaluating claims against what was known at the time.
-- **Speaker conviction**: lexical analysis (hedging, certainty, filler, first-person, speech rate…) surfaced per claim.
-- **Adjustable overlay**: a right-anchored, full-height panel with a resize handle for width (persisted), plus a **floating** mode you drag from the header, with its position saved across sessions.
-- **Session export**: one button generates a **self-contained HTML report** (`factcheck-report.html`, printable to PDF) with a summary count and per-speaker cards (verdict, confidence, timestamp, sources). Localized.
-
-### Model & keys
-
-In the popup you choose the Claude model — **Haiku** (fastest/cheapest), **Sonnet** (balanced), or **Opus** (most capable) — and how to call it:
-
-- **Anthropic API key** (default): paste your `sk-ant-…` key in the popup; the request goes straight to `api.anthropic.com`.
-- **Local subscription (warm bridge)**: check *"Use local subscription (warm bridge)"*; the extension talks to `http://127.0.0.1:8787` and no key is required.
-
-### Warm bridge (use your Claude subscription)
-
-`bridge/warm-bridge.js` is a tiny local HTTP server that exposes the same shape as the Anthropic Messages API but, behind the scenes, invokes the **Claude Code** CLI — so you use your **subscription** instead of a metered API key. Each request spawns an independent `claude -p` process (one-shot, in parallel).
-
-> ⚡ **TL;DR — what you need to start/configure:**
-> 1. **Install and log in to Claude Code** (one time): `claude login`.
-> 2. **Start the bridge** every session, in a terminal you leave running: `node bridge/warm-bridge.js`.
-> 3. **In the extension popup**, check *"Use local subscription (warm bridge)"*.
->
-> The bridge does **not** start on its own together with the extension — you have to launch it by hand each time. If you forget step 2 (or the bridge process died), the popup shows a **blinking** ⚠ warning until you start it and it becomes reachable again.
-
-**Prerequisites (one time):**
-
-1. install Claude Code and log in once: `claude` (or `claude login`). The CLI stores your subscription credentials; the bridge manages no token.
-2. start the bridge: `node bridge/warm-bridge.js` — on start it does one small real round-trip to confirm auth works.
-3. in the extension popup, check *"Use local subscription (warm bridge)"*.
-
-**Env overrides (all optional):** `BRIDGE_PORT` (default 8787), `BRIDGE_HOST` (default 127.0.0.1), `REQ_TIMEOUT` (default 120000 ms), `VERIFY_TIMEOUT` (startup self-check), `CLAUDE_BIN` (CLI path). Status endpoint: `GET /health`.
-
-> The request's `max_tokens` and `temperature` are ignored (the `claude -p` CLI doesn't expose them). This is a **personal / dev tool**: it is not distributable to other users (each would need Claude Code + the bridge on their own PC).
-
-### Languages
-
-16 selectable languages in the popup: `en, es, fr, de, it, pt, nl, hi, ja, zh, ar, ko, ru, pl, sv, tr`. The choice drives Whisper's transcription and the language claims/explanations are written in. The overlay UI and export are localized in **English/Italian** automatically based on `navigator.language`.
-
-Selectable Whisper transcription models: **tiny** (fastest, least accurate), **base** (balanced, recommended), **small** (most accurate, heavier). On first run the model is downloaded from HuggingFace and then cached.
-
-### What's check-worthy?
-
-Check-worthy claims in this context are:
-- specific factual statements
-- statistics and numerical claims
-- historical events
-- government actions and policies
-- scientific and medical claims
-- public records and documented events
-
-i.e.
-- "inflation peaked at 9.1% in 2022."
-- "the bill passed the Senate in 2021."
-- "the unemployment rate is currently below 5%."
-
-**NOT:**
-- opinions
-- predictions / future promises
-- rhetorical questions
-- value judgments
-- subjective descriptions
-
-i.e.
-- "this policy will destroy the economy."
-- "I have the best plan."
-- "if my opponent wins, disaster will follow."
-
-### How to use InTruth
-
-1. open a video, livestream, debate, interview, or speech
-2. start the extension and assign speakers with the press of a button
-3. audio from the active tab is captured
-4. speech is transcribed (locally)
-5. check-worthy factual claims are extracted
-6. claims are evaluated against authoritative sources
-7. verdicts and explanations are displayed!
-
-### Privacy
-
-You provide your own credentials — I have no access to them. Transcription happens **locally** in your browser (Whisper). With your API key, transcript data is sent directly to the AI service you configured to generate fact-check results; with the warm bridge, the request stays on your machine (to your own Claude Code CLI). See the privacy policy on the web store for complete details.
-
-### Permissions
-
-- **tabCapture**: extracts audio from the active tab after you explicitly start a fact-checking session.
-- **activeTab**: interacts with the currently selected tab.
-- **storage**: stores preferences and configuration **locally** (key, model, language, panel size/position).
-- **offscreen**: supports background audio processing and Whisper transcription.
-
-Host permissions: `api.anthropic.com` (Claude API), `huggingface.co` / `*.hf.co` (Whisper model downloads), Google Fonts, and `127.0.0.1:8787` / `localhost:8787` (local bridge). The CSP enables `wasm-unsafe-eval` for the ONNX runtime.
-
-> Note: supporting web search (grounding) uses **Claude's native web search** — no external service. With the warm bridge, the second pass invokes `claude -p` with the `WebSearch` tool enabled (the equivalent of typing "search the internet"); with the direct API it uses Anthropic's server-side `web_search` tool. No Serper/SerpAPI key required.
-
-### Limitations and warnings
-
-Fact-checking is inherently imperfect! Generated verdicts may occasionally be incorrect, incomplete, or based on outdated information. If you're unsure about something, independently evaluate it and consult original sources. This extension is an **informational tool** and NOT a definitive authority!
-
-### Requirements
-
-- Chrome Manifest V3 / modern Chromium-based browser with **WebGPU** support
-- user-provided AI API key **or** Claude Code + `warm-bridge.js` for the local subscription
-
-### License
-
-view license tab.
+Original author: **Risha Panigrahi**,
+https://github.com/rpanigrahi222/intruth-factcheck.
+The original custom noncommercial [LICENSE](LICENSE) is preserved.

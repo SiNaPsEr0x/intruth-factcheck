@@ -1,16 +1,15 @@
+const { DEFAULT_MODEL, BRIDGE_URL, modelId } = InTruthProtocol;
 // popup.js
 
 const toggleBtn   = document.getElementById('toggleBtn');
 const statusEl    = document.getElementById('status');
-const anthropicEl = document.getElementById('anthropicKey');
 const whisperEl   = document.getElementById('whisperModel');
 const keyHint     = document.getElementById('keyHint');
 const keysSection = document.getElementById('keysSection');
 const languageEl  = document.getElementById('languageSelect');
 const langFlagEl  = document.getElementById('langFlag');
 const modelEl     = document.getElementById('modelSelect');
-const useBridgeEl = document.getElementById('useBridge');
-const apiKeyField = document.getElementById('apiKeyField');
+const recordingDateEl = document.getElementById('recordingDate');
 const cacheListEl  = document.getElementById('cacheList');
 const cacheTotalEl = document.getElementById('cacheTotal');
 const cacheClearEl = document.getElementById('cacheClearBtn');
@@ -25,11 +24,8 @@ const P_I18N = {
     statusLive: 'Live • Fact-checking active',
     btnStart: 'Start Fact-Checking',
     btnStop: 'Stop Fact-Checking',
-    hintBridge: 'Using local subscription bridge.',
+    hintBridge: 'Codex connected. Ready to start.',
     bridgeWarnText: '⚠ Bridge not running — start it (see README).',
-    hintEnterKey: 'Enter your Anthropic API key to start.',
-    hintKeySaved: 'Key saved.',
-    hintNeedKey: 'Please enter your Anthropic API key.',
     failedStart: 'Failed to start: ',
     unknownError: 'unknown error',
     cacheChecking: 'Checking cache…',
@@ -37,31 +33,24 @@ const P_I18N = {
     cacheUnavailable: 'Cache unavailable.',
     cacheTotal: 'Total: ',
     cacheClear: 'Clear cache',
-    labelModel: 'Model',
-    optHaiku: 'Haiku — fastest, cheapest',
-    optSonnet: 'Sonnet — balanced',
-    optOpus: 'Opus — most capable',
-    useBridge: 'Use local subscription (warm bridge)',
-    bridgeHint: 'Runs Claude via your subscription — start <code>warm-bridge.js</code> first.',
+    labelModel: 'Codex model',
+    bridgeHint: 'Uses your Codex login. Start the local bridge with npm start.',
     labelWhisper: 'Transcription (local, WebGPU)',
     optTiny: 'Tiny — fastest, least accurate',
     optBase: 'Base — balanced (recommended)',
     optSmall: 'Small — most accurate, heavier',
     whisperHint: 'Runs Whisper in your browser via WebGPU — no key, no cloud. First run downloads the model (cached afterwards).',
     labelCache: 'Downloaded models',
-    labelApiKey: 'Anthropic API Key',
     labelLanguage: 'Language',
+    labelDate: 'Recording date (optional)',
   },
   it: {
     statusInactive: 'Inattivo',
     statusLive: 'Live • Fact-checking attivo',
     btnStart: 'Avvia il Fact-Checking',
     btnStop: 'Ferma il Fact-Checking',
-    hintBridge: 'Bridge locale (abbonamento) in uso.',
+    hintBridge: 'Codex collegato. Pronto per iniziare.',
     bridgeWarnText: '⚠ Bridge non avviato — avvialo (vedi README).',
-    hintEnterKey: 'Inserisci la tua API key Anthropic per iniziare.',
-    hintKeySaved: 'Chiave salvata.',
-    hintNeedKey: 'Inserisci la tua API key Anthropic.',
     failedStart: 'Avvio non riuscito: ',
     unknownError: 'errore sconosciuto',
     cacheChecking: 'Controllo della cache…',
@@ -69,28 +58,23 @@ const P_I18N = {
     cacheUnavailable: 'Cache non disponibile.',
     cacheTotal: 'Totale: ',
     cacheClear: 'Svuota cache',
-    labelModel: 'Modello',
-    optHaiku: 'Haiku — il più veloce ed economico',
-    optSonnet: 'Sonnet — bilanciato',
-    optOpus: 'Opus — il più capace',
-    useBridge: 'Usa abbonamento locale (warm bridge)',
-    bridgeHint: 'Esegue Claude con il tuo abbonamento — avvia prima <code>warm-bridge.js</code>.',
+    labelModel: 'Modello Codex',
+    bridgeHint: 'Usa il tuo accesso Codex. Avvia il bridge locale con npm start.',
     labelWhisper: 'Trascrizione (locale, WebGPU)',
     optTiny: 'Tiny — il più veloce, meno accurato',
     optBase: 'Base — bilanciato (consigliato)',
     optSmall: 'Small — il più accurato, più pesante',
     whisperHint: 'Esegue Whisper nel browser via WebGPU — niente chiavi, niente cloud. Al primo avvio scarica il modello (poi resta in cache).',
     labelCache: 'Modelli scaricati',
-    labelApiKey: 'API Key Anthropic',
     labelLanguage: 'Lingua',
+    labelDate: 'Data di registrazione (facoltativa)',
   },
 };
 function pt(key) { return (P_I18N[POPUP_LANG] || P_I18N.en)[key] ?? P_I18N.en[key] ?? key; }
 // Translate every static element marked with data-i18n in popup.html
 for (const el of document.querySelectorAll('[data-i18n]')) {
   const k = el.dataset.i18n;
-  if (k === 'bridgeHint') el.innerHTML = pt(k); // static string containing <code>
-  else el.textContent = pt(k);
+  el.textContent = pt(k);
 }
 
 const LANG_FLAGS = {
@@ -106,109 +90,61 @@ function updateFlag() {
 
 let isActive = false;
 
-// ── Load saved key and language ───────────────────────────────────────────────
+let bridgeReady = false;
+let settingsReady = false;
+let starting = false;
 
-chrome.storage.local.get(['anthropicKey', 'whisperModel', 'transcriptLanguage', 'selectedModel', 'useBridge'], (data) => {
-  if (data.anthropicKey) { anthropicEl.value = data.anthropicKey; anthropicEl.classList.add('saved'); }
+async function initializeSettings() {
+  const data = await chrome.storage.local.get(['whisperModel', 'transcriptLanguage', 'selectedModel', 'recordingDate']);
   whisperEl.value = data.whisperModel || 'base';
   languageEl.value = data.transcriptLanguage || 'auto';
-  if (data.selectedModel) modelEl.value = data.selectedModel;
-  useBridgeEl.checked = !!data.useBridge;
+  recordingDateEl.value = data.recordingDate || '';
+  try { modelEl.value = modelId(data.selectedModel); } catch { modelEl.value = DEFAULT_MODEL; }
+  await chrome.storage.local.remove(['anthropicKey', 'useBridge', 'bridgeUrl']);
   updateFlag();
-  updateBridgeUI();
+  settingsReady = true;
   updateHint();
-});
+}
+initializeSettings().catch(error => { keyHint.textContent = error.message; });
 
-// ── Save key on change ────────────────────────────────────────────────────────
-
-anthropicEl.addEventListener('input', () => {
-  anthropicEl.classList.remove('saved');
-  updateHint();
-});
-anthropicEl.addEventListener('change', () => {
-  chrome.storage.local.set({ anthropicKey: anthropicEl.value.trim() });
-  anthropicEl.classList.add('saved');
-  updateHint();
-});
-
-whisperEl.addEventListener('change', () => {
-  chrome.storage.local.set({ whisperModel: whisperEl.value });
-});
-
-// ── Save language on change ───────────────────────────────────────────────────
-
+whisperEl.addEventListener('change', () => chrome.storage.local.set({ whisperModel: whisperEl.value }));
+recordingDateEl.addEventListener('change', () => chrome.storage.local.set({ recordingDate: recordingDateEl.value }));
 languageEl.addEventListener('change', () => {
   chrome.storage.local.set({ transcriptLanguage: languageEl.value });
   updateFlag();
 });
-
-// ── Save model + bridge on change ─────────────────────────────────────────────
-
-modelEl.addEventListener('change', () => {
-  chrome.storage.local.set({ selectedModel: modelEl.value });
-});
-
-useBridgeEl.addEventListener('change', () => {
-  chrome.storage.local.set({ useBridge: useBridgeEl.checked });
-  updateBridgeUI();
-  updateHint();
-});
-
-// ── Bridge reachability check (blinking warning if bridge mode is on but the
-// local warm-bridge.js process isn't running) ────────────────────────────────
-const BRIDGE_HEALTH_URL = 'http://127.0.0.1:8787/health';
-let bridgePollTimer = null;
-
-async function isBridgeReachable() {
+modelEl.addEventListener('change', async () => {
   try {
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 1200);
-    const res = await fetch(BRIDGE_HEALTH_URL, { signal: ctrl.signal });
-    clearTimeout(timer);
-    return res.ok;
-  } catch {
-    return false;
+    modelEl.value = modelId(modelEl.value.trim());
+    await chrome.storage.local.set({ selectedModel: modelEl.value });
+    updateHint();
+  } catch (error) {
+    keyHint.textContent = error.message;
+    toggleBtn.disabled = !isActive;
   }
-}
+});
 
 async function refreshBridgeWarning() {
-  if (!useBridgeEl.checked) { bridgeWarningEl.hidden = true; return; }
-  bridgeWarningEl.hidden = await isBridgeReachable();
-}
-
-function updateBridgeUI() {
-  // In bridge mode the extension talks to the local warm bridge using your
-  // subscription, so the API key field is not required.
-  apiKeyField.style.display = useBridgeEl.checked ? 'none' : 'flex';
-
-  if (useBridgeEl.checked) {
-    refreshBridgeWarning();
-    if (!bridgePollTimer) bridgePollTimer = setInterval(refreshBridgeWarning, 4000);
-  } else {
-    bridgeWarningEl.hidden = true;
-    if (bridgePollTimer) { clearInterval(bridgePollTimer); bridgePollTimer = null; }
-  }
+  let detail = '';
+  try {
+    const response = await fetch(BRIDGE_URL + '/health', { signal: AbortSignal.timeout(1500) });
+    const health = await response.json();
+    bridgeReady = response.ok && health.service === 'intruth-codex' && health.protocol === 2 && health.ready === true;
+    detail = health.error || '';
+  } catch { bridgeReady = false; }
+  bridgeWarningEl.hidden = bridgeReady;
+  bridgeWarningEl.textContent = detail || pt('bridgeWarnText');
+  updateHint();
 }
 
 function updateHint() {
-  // Transcription runs on-device (Whisper via WebGPU) and needs no key. Only the
-  // Claude credentials gate starting, unless the local subscription bridge is on.
-  if (useBridgeEl.checked) {
-    keyHint.textContent = pt('hintBridge');
-    keyHint.className = 'key-hint ok';
-    toggleBtn.disabled = false;
-    return;
-  }
-  if (!anthropicEl.value.trim()) {
-    keyHint.textContent = pt('hintEnterKey');
-    keyHint.className = 'key-hint';
-    toggleBtn.disabled = isActive ? false : true;
-  } else {
-    keyHint.textContent = pt('hintKeySaved');
-    keyHint.className = 'key-hint ok';
-    toggleBtn.disabled = false;
-  }
+  toggleBtn.disabled = starting || (!isActive && (!bridgeReady || !settingsReady));
+  keyHint.textContent = bridgeReady ? pt('hintBridge') : '';
+  keyHint.className = 'key-hint' + (bridgeReady ? ' ok' : '');
 }
+refreshBridgeWarning();
+const bridgePollTimer = setInterval(refreshBridgeWarning, 4000);
+window.addEventListener('pagehide', () => clearInterval(bridgePollTimer));
 
 // ── Downloaded Whisper models (Transformers.js browser cache) ────────────────
 // Transformers.js stores model files in the Cache Storage of the extension
@@ -328,36 +264,26 @@ function setActive(active) {
 // ── Toggle ────────────────────────────────────────────────────────────────────
 
 toggleBtn.addEventListener('click', async () => {
-  if (isActive) {
-    chrome.runtime.sendMessage({ type: 'STOP_FACTCHECK' });
-    setActive(false);
-    return;
-  }
-
-  const anthropicKey = anthropicEl.value.trim();
-  const useBridge    = useBridgeEl.checked;
-
-  if (!useBridge && !anthropicKey) {
-    keyHint.textContent = pt('hintNeedKey');
-    keyHint.className   = 'key-hint error';
-    return;
-  }
-
-  // save key, Whisper model, language, Claude model and bridge preference then start
-  await new Promise(r => chrome.storage.local.set({
-    anthropicKey,
-    whisperModel: whisperEl.value,
-    transcriptLanguage: languageEl.value,
-    selectedModel: modelEl.value,
-    useBridge,
-  }, r));
-
-  chrome.runtime.sendMessage({ type: 'START_FACTCHECK' }, (res) => {
-    if (res?.ok) {
-      setActive(true);
-    } else {
-      keyHint.textContent = pt('failedStart') + (res?.error || pt('unknownError'));
-      keyHint.className   = 'key-hint error';
+  starting = true;
+  updateHint();
+  try {
+    if (isActive) {
+      const response = await chrome.runtime.sendMessage({ type: 'STOP_FACTCHECK' });
+      if (!response?.ok) throw new Error(response?.error || pt('unknownError'));
+      setActive(false);
+      return;
     }
-  });
+    const selectedModel = modelId(modelEl.value.trim());
+    await chrome.storage.local.set({ whisperModel: whisperEl.value,
+      transcriptLanguage: languageEl.value, selectedModel, recordingDate: recordingDateEl.value });
+    const response = await chrome.runtime.sendMessage({ type: 'START_FACTCHECK' });
+    if (!response?.ok) throw new Error(response?.error || pt('unknownError'));
+    setActive(true);
+  } catch (error) {
+    keyHint.textContent = pt('failedStart') + error.message;
+    keyHint.className = 'key-hint error';
+  } finally {
+    starting = false;
+    toggleBtn.disabled = !isActive && (!bridgeReady || !settingsReady);
+  }
 });
