@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const path = require('node:path');
 const http = require('node:http');
 const { once } = require('node:events');
-const { createRunner, createBridge, checkCli } = require('../bridge/codex-bridge.js');
+const { createRunner, createBridge, readLimitedOutput, checkCli } = require('../bridge/codex-bridge.js');
 const { modelId, cleanSources, validateClaims } = require('../realtime-factcheck/src/shared/protocol.js');
 const command = { bin: process.execPath, prefix: [path.join(__dirname, 'fixtures/codex.cjs')] };
 const payload = { prompt: 'Una frase in italiano: è verificabile?', instructions: 'Check the evidence.', webSearch: false };
@@ -39,6 +39,19 @@ test('model output cannot inject internal UI and session properties', () => {
   const [clean] = validateClaims({ claims: [claim] });
   assert.deepEqual(Object.keys(clean).sort(), ['claim', 'verdict', 'confidence', 'explanation', 'sources',
     'speaker', 'speaker_confidence', 'speaker_confidence_explanation'].sort());
+});
+
+test('output limits count actual bytes read, including multibyte UTF-8', async () => {
+  const fs = require('node:fs/promises');
+  const directory = await fs.mkdtemp(path.join(require('node:os').tmpdir(), 'intruth-output-test-'));
+  try {
+    const file = path.join(directory, 'answer.json');
+    await fs.writeFile(file, 'èè');
+    assert.equal(await readLimitedOutput(file, 4), 'èè');
+    await assert.rejects(readLimitedOutput(file, 3), /response limit/);
+    await fs.writeFile(file, 'x'.repeat(128 * 1024));
+    await assert.rejects(readLimitedOutput(file, 64 * 1024), /response limit/);
+  } finally { await fs.rm(directory, { recursive: true, force: true }); }
 });
 
 test('CLI integration handles stdin, final JSON and actual search events', async () => {

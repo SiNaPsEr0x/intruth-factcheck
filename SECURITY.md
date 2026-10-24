@@ -91,12 +91,17 @@ the merge handler's refusal paths. Portable source ZIPs now include the complete
 
 Initial local checks: the original 17 tests and lint passed, npm audit reported
 zero known vulnerabilities; OSV also found no known vulnerabilities in the
-lockfile/vendor SBOM. Expanded validation is recorded in docs/VALIDATION.md.
+lockfile/vendor SBOM. CodeQL subsequently identified four issues: two imprecise assertions in the
+browser smoke test, first-occurrence-only PURL encoding, and the output file's
+separate size-check/read sequence. The assertions now inspect the parsed DOM,
+PURL components use URI encoding, and a bounded stream enforces the output limit
+on bytes actually read. No CodeQL rule was disabled to clear these findings.
+Expanded validation is recorded in docs/VALIDATION.md.
 No exploitable high/critical source issue was established by this review.
 This is a scoped source review, not proof that the program has no vulnerabilities.
 
-Live Codex authentication/model access, real user-gesture audio capture, hardware
-WebGPU, Windows and macOS remain separate runtime checks. CI's Codex responses
-are simulated and do not establish that the user's account can use the selected
-model. Model-generated verdicts, sources, transcripts and downloaded model weights
+Real `gpt-6-luna` inference and native web-search probes passed with the current
+login on 2026-10-24. Real user-gesture audio capture, hardware WebGPU, Windows and
+macOS remain separate runtime checks. CI's Codex responses are simulated; each
+installation still needs to verify its own account/model access. Model-generated verdicts, sources, transcripts and downloaded model weights
 still require appropriate human review.

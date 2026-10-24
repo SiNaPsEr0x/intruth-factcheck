@@ -168,9 +168,10 @@ Verifiche eseguite su questa versione:
 - **Traduzione reale inglese → italiano**: «La Terra orbita intorno al Sole.»
 - Controlli di sintassi, checksum, versioni stabili, archivio ZIP e `npm audit`.
 
-La verifica **reale di Codex/Luna** è ancora bloccata in questo ambiente da un
-token di accesso non rinnovabile. Non è una prova di funzionamento del modello:
-sul tuo PC esegui login, `npm run verify` e poi `npm run verify:web`.
+Il 24 ottobre sono passate anche le prove **reali di Codex/Luna** e della
+**ricerca web nativa** (`npm run verify` e `npm run verify:web`). Il precedente
+blocco di autenticazione non si è ripresentato nella sessione attuale. Sul tuo PC
+verifica comunque il tuo login e l'accesso al modello con gli stessi comandi.
 La cattura dell'audio della tua scheda tramite gesto dell'utente e WebGPU sulla
 tua GPU richiedono una prova locale. Vedi [risultati](docs/VALIDATION.md).
 
@@ -294,9 +295,9 @@ Development checks: `npm test`, `npm run lint`, `npm run versions`,
 Install the browser first with `npm exec -- playwright install chromium`.
 Native extension registration, real Whisper transcription and English/Italian
 translation passed on stable Chrome 156.0.8078.47; the native pipeline's Codex
-responses were simulated. Actual Codex inference remains blocked by this
-environment's expired login. Real tabCapture/user-gesture behavior and hardware
-WebGPU still need local testing. See [validation](docs/VALIDATION.md).
+responses were simulated. Real Codex inference and native web-search probes
+also passed on 2026-10-24 with the current login. Real tabCapture/user-gesture
+behavior and hardware WebGPU still need local testing. See [validation](docs/VALIDATION.md).
 
 Original author: **Risha Panigrahi**,
 https://github.com/rpanigrahi222/intruth-factcheck.

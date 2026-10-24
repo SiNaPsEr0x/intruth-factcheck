@@ -64,8 +64,8 @@ context in the PR; this record describes the updated 2.1.0 files and checks.
 
 ## Security automation update — 2026-10-24
 
-- **23 tests passed** locally on Node 24.22.1: the original 17 plus claim-field
-  isolation and five security/merge-policy regression tests.
+- **24 tests passed** locally on Node 24.22.1: the original 17 plus claim-field
+  isolation, byte-bounded output and five security/merge-policy regression tests.
 - Lint, stable-version checks, the vendor rebuild (no artifact/checksum changes),
   both portable ZIPs and their security-configuration contents passed.
 - `npm audit`: **0 known vulnerabilities**; OSV-Scanner 2.7.0 scanned 54 lockfile
@@ -80,6 +80,15 @@ context in the PR; this record describes the updated 2.1.0 files and checks.
   a ShellCheck warning in the new aggregate gate; the expression was corrected
   and the entire pipeline was rerun.
 
-No live Codex inference, hardware WebGPU or Windows/macOS validation was added by
-this update. The earlier account/model-access limitation above still applies.
+CodeQL's first JavaScript scan found four issues. All four were corrected:
+DOM-based smoke assertions replace imprecise HTML/URL regex checks, PURL names use
+component encoding, and Codex output is read through a byte-bounded stream
+instead of a separate pathname size-check/read pair. No CodeQL rule was disabled.
+
+**Live `npm run check`, `npm run verify` and `npm run verify:web` passed** for
+`gpt-6-luna` in the current session on 2026-10-24. The last probe requires an
+actual native web-search event plus a source-backed schema-valid claim. These
+current results supersede the earlier session's expired-login limitation;
+other installations must still verify their own account. Hardware WebGPU,
+full real-tab audio capture and Windows/macOS validation remain outstanding.
 See SECURITY.md for scan scope, automation prerequisites and integration policy.

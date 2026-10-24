@@ -8,7 +8,7 @@ const packages = [['@huggingface/transformers', vendor.transformers],
   ['onnxruntime-web', vendor.onnxruntime], ['onnxruntime-common', vendor.onnxruntime]];
 const sbom = { bomFormat: 'CycloneDX', specVersion: '1.6', version: 1,
   components: packages.map(([name, version]) => ({ type: 'library', name, version,
-    purl: `pkg:npm/${name.replace('@', '%40')}@${version}` })) };
+    purl: `pkg:npm/${name.split('/').map(encodeURIComponent).join('/')}@${version}` })) };
 const content = JSON.stringify(sbom, null, 2) + '\n';
 const target = path.join(root, 'security/vendor.cdx.json');
 if (process.argv.includes('--check')) {
