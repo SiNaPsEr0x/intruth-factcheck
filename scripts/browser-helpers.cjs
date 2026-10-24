@@ -50,7 +50,7 @@ async function launchBrowser() {
     args: process.getuid?.() === 0 ? ['--no-sandbox'] : [],
   });
 }
-async function launchNativeExtension({ proxy = false } = {}) {
+async function launchNativeExtension({ proxy = false, mockSignIn = false } = {}) {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'intruth-native-'));
   let context;
   try {
@@ -59,6 +59,7 @@ async function launchNativeExtension({ proxy = false } = {}) {
       ignoreDefaultArgs: ['--disable-extensions'], args: ['--enable-unsafe-extension-debugging'],
       ...(proxy && process.env.HTTPS_PROXY ? { proxy: { server: process.env.HTTPS_PROXY, bypass: '127.0.0.1,localhost' } } : {}),
     });
+    if (mockSignIn) await context.route('https://auth.openai.com/authorize?state=fixture', route => route.fulfill({ contentType: 'text/html', body: '<html><body>Simulated official login page</body></html>' }));
     const cdp = await context.browser().newBrowserCDPSession();
     const { id } = await cdp.send('Extensions.loadUnpacked', { path: path.join(root, 'realtime-factcheck') });
     return { context, id, close: async () => { await context.close(); await fs.rm(directory, { recursive: true, force: true }); } };

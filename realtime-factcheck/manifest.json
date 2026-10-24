@@ -1,13 +1,14 @@
 {
   "manifest_version": 3,
-  "name": "InTruth \u00b7 Codex",
-  "version": "2.1.0",
+  "name": "InTruth · Codex",
+  "version": "2.2.0",
   "description": "Live fact-checking with on-device Whisper transcription and your local Codex CLI.",
   "permissions": [
     "activeTab",
     "storage",
     "tabCapture",
-    "offscreen"
+    "offscreen",
+    "nativeMessaging"
   ],
   "host_permissions": [
     "https://huggingface.co/*",
@@ -53,5 +54,6 @@
     "48": "assets/icon48.png",
     "128": "assets/icon128.png"
   },
-  "minimum_chrome_version": "116"
+  "minimum_chrome_version": "116",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAiv8FDILRyuqHx60GzqRHW3Fc19AJLMqljEVbpDmQCZ2GnjU9nEQP0DxmUhYzYf9mNH32jTReDGAWo40q+nty6r5mavM8/UtSdJkSh7YQxCtImbvAcX0onvyfL7dkZQ6Yha6EnC74SW+cBrNHT++rWuB1i41Hmyk6ybAiCXHLn79/I64OYrCSwp3CE2c2xbXG9xz4XaSeX+HY75e0t2AX9V+xsTvqZwLLaorUlMWVmj3W6SNnnsd3aVhkzfXm/mumtDb3WLqBHdq8fWY16P5D8oBtUHp1CU95hVbsEVQF26MLsz0rrwStT0LpCQ22X9LjFYnZhp5yhr1qlvp4n0oonwIDAQAB"
 }

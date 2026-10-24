@@ -60,6 +60,33 @@ jobs:
       - run: npm exec -- playwright install --with-deps chromium
       - run: npm run test:browser
       - run: npm run test:native
+      - run: npm run test:setup
+  setup-platforms:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - run: npm ci --ignore-scripts
+      - run: npm test
+      - run: npm run lint
+      - run: npm run setup
+      - run: node scripts/install-helper.cjs --uninstall
+      - if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $errorsFound = $null
+          [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $PWD 'scripts/install-windows.ps1'), [ref]$tokens, [ref]$errorsFound) | Out-Null
+          if ($errorsFound.Count) { throw ($errorsFound | Out-String) }
   audit:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -152,7 +179,7 @@ jobs:
   security-gate:
     name: Security gate
     if: always()
-    needs: [check, browser, audit, osv, codeql, secrets, workflow-security]
+    needs: [check, browser, setup-platforms, audit, osv, codeql, secrets, workflow-security]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

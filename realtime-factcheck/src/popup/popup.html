@@ -22,6 +22,7 @@
       <div class="key-field">
         <div class="key-hint" data-i18n="bridgeHint">Uses your Codex login. Start the local bridge with npm start.</div>
         <div class="bridge-warning" id="bridgeWarning" role="status" hidden></div>
+        <button class="cache-clear" id="authBtn" type="button" hidden>Accedi a ChatGPT</button>
       </div>
       <div class="key-field" id="whisperModelField">
         <label class="key-label" data-i18n="labelWhisper">Transcription (local, WebGPU)</label>
@@ -77,6 +78,7 @@
     <button class="toggle-btn" id="toggleBtn" disabled data-i18n="btnStart">Start Fact-Checking</button>
   </div>
   <script src="../shared/protocol.js"></script>
+  <script src="../shared/connection.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>

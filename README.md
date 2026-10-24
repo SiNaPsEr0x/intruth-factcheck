@@ -12,9 +12,44 @@ https://github.com/rpanigrahi222/intruth-factcheck.
 Adattamento del repository https://github.com/SiNaPsEr0x/intruth-factcheck.
 Vedi [LICENSE](LICENSE) e [NOTICE.md](NOTICE.md).
 
-## Avvio rapido
+## Installazione automatica
 
-Versione **2.1.0**, con software aggiornato ai canali **stabili** verificati il
+1. Scarica ed estrai lo [ZIP del progetto](https://github.com/SiNaPsEr0x/intruth-factcheck/archive/refs/heads/master.zip).
+2. **Una sola volta sul PC del browser**, esegui `Install-InTruth.cmd` su Windows
+   oppure `Install-InTruth.command` su macOS/Linux. L’installatore scarica Node
+   verificandone il checksum, installa il componente locale e lo registra nel
+   browser per l’utente corrente, senza privilegi amministrativi.
+3. In `chrome://extensions`, carica la cartella **`realtime-factcheck`** come
+   estensione non pacchettizzata, oppure ricaricala se già presente.
+4. Apri InTruth. Il browser avvia il componente locale. Se serve l’accesso,
+   si apre **la pagina ufficiale ChatGPT**: completa solo il login e l’eventuale
+   conferma. Il popup diventa pronto automaticamente, senza riavviare nulla.
+
+Se Codex ha già una sessione utilizzabile, viene riusata. La CLI gestisce
+memorizzazione e rinnovo dei token. Nessuna password/API key/token va incollata
+nel popup. Un accesso annullato mostra il pulsante per riprovare, senza aprire
+schede in continuazione. L’avvio automatico non avvia la cattura audio: il tasto
+**Avvia il Fact-Checking** resta necessario per il consenso di Chrome.
+
+**L’installazione locale iniziale è necessaria:** un’estensione Chrome non può
+installare o eseguire programmi arbitrari al solo caricamento. Dopo questa
+installazione non servono terminali aperti o comandi `npm start`/`codex login`.
+Chrome, eventuali criteri aziendali e il sistema operativo possono richiedere
+la normale autorizzazione all’installazione/esecuzione.
+
+Il nuovo ID stabile è `ihohghmjebpjjlehnbdknchigighdlke`: aggiornando dalla vecchia
+versione non pacchettizzata può essere necessario rimuoverla e ricaricarla;
+le preferenze dell’estensione possono azzerarsi, mentre il login Codex resta.
+Se è ancora aperto un vecchio bridge 2.1 in un terminale, chiudilo una volta per
+liberare la porta 8787 prima del nuovo avvio automatico.
+
+Chi ha già Node può usare `npm run setup`. Per rimuovere soltanto la registrazione
+dell’avvio automatico: `node scripts/install-helper.cjs --uninstall`.
+I file locali e il login Codex non vengono cancellati.
+
+## Avvio manuale / sviluppo
+
+Versione **2.2.0**, con software aggiornato ai canali **stabili** verificati il
 23 ottobre 2026. Usa **Node.js 26.12.1** (ultima stabile), oppure **24.22.1 LTS**,
 **npm 12.2.1** e Chrome/Chromium stabile aggiornato. Codex CLI **0.164.0** viene
 installato dal lockfile del progetto. Il bridge deve essere avviato **sullo
@@ -159,7 +194,7 @@ aggiornati insieme, con checksum e licenze. Dettagli e fonti delle versioni:
 
 Verifiche eseguite su questa versione:
 
-- **17 test automatici**: protocollo, processi, errori, code, audio e isolamento
+- **30 test automatici**: protocollo, processi, errori, code, audio e isolamento
   delle sessioni; Codex è simulato in questi test.
 - **Interfaccia e MV3 nativa**: popup, storage, permessi di origine del bridge,
   content script, worker, card e stop. Il modello è simulato.
@@ -255,12 +290,23 @@ I risultati sono assistenza informativa e richiedono controllo delle fonti.
 
 ## English
 
+Version 2.2 adds automatic local startup and official ChatGPT browser sign-in.
+Run `Install-InTruth.cmd` (Windows) or `Install-InTruth.command` (macOS/Linux)
+once, then load/reload the `realtime-factcheck` extension. No terminal or pasted
+key/token is needed for subsequent use. A usable Codex login is reused; otherwise
+the official sign-in page opens and the popup becomes ready after completion.
+Chrome requires this one-time local helper installation; the extension alone
+cannot install arbitrary executables. Corporate/OS policies still apply.
+The stable extension ID may reset preferences when upgrading older unpacked builds.
+Close an old manually started 2.1 bridge once to release port 8787.
+
+
 InTruth combines local Whisper transcription with **Codex CLI** analysis and
 native live web search. Its configured default is **`gpt-6-luna`**, reasoning
 **`low`**. Account access to that exact model must be verified; no invented
 “light/latest” aliases or silent model fallbacks are used.
 
-Version 2.1.0 uses stable releases checked on 2026-10-23: Node 26.12.1
+Version 2.2.0 uses stable releases checked on 2026-10-23: Node 26.12.1
 (or 24.22.1 LTS), npm 12.2.1, Codex CLI 0.164.0, Transformers.js 4.3.1,
 stable ONNX Runtime 1.30.0, esbuild 0.28.2 and Playwright 1.64.1.
 The browser bundle is rebuilt to avoid upstream's development ORT dependency.

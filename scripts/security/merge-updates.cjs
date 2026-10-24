@@ -43,7 +43,7 @@ async function mergeUpdates({ github, context, core }) {
   const { data: run } = await github.rest.actions.getWorkflowRun({ owner, repo, run_id: event.id });
   if (run.path !== WORKFLOW || run.status !== 'completed' || run.conclusion !== 'success' || run.head_sha !== event.head_sha) return;
   const jobs = await github.paginate(github.rest.actions.listJobsForWorkflowRun, { owner, repo, run_id: run.id, filter: 'latest', per_page: 100 });
-  const required = ['check (22)', 'check (24)', 'check (26)', 'browser', 'audit', 'osv / osv-scan',
+  const required = ['setup-platforms (windows-latest)', 'setup-platforms (macos-latest)', 'check (22)', 'check (24)', 'check (26)', 'browser', 'audit', 'osv / osv-scan',
     'codeql (javascript-typescript)', 'codeql (actions)', 'secrets', 'workflow-security', 'Security gate'];
   if (jobs.some(job => job.conclusion !== 'success') || required.some(name => !jobs.some(job => job.name === name && job.conclusion === 'success'))) {
     core.info('The complete security/quality gate has not passed.'); return;

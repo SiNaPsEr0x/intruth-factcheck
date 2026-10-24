@@ -14,6 +14,7 @@ const cacheListEl  = document.getElementById('cacheList');
 const cacheTotalEl = document.getElementById('cacheTotal');
 const cacheClearEl = document.getElementById('cacheClearBtn');
 const bridgeWarningEl = document.getElementById('bridgeWarning');
+const authBtn = document.getElementById('authBtn');
 
 // ── I18N — popup UI labels follow the browser language (it/en) ───────────────
 // Content language (transcript/verdicts) is handled elsewhere; this is UI only.
@@ -25,7 +26,12 @@ const P_I18N = {
     btnStart: 'Start Fact-Checking',
     btnStop: 'Stop Fact-Checking',
     hintBridge: 'Codex connected. Ready to start.',
-    bridgeWarnText: '⚠ Bridge not running — start it (see README).',
+    bridgeWarnText: 'Install the InTruth local helper once, then reopen this popup. See README → Automatic setup.',
+    authPending: 'Complete sign-in in the ChatGPT tab. Connection updates automatically.',
+    authRequired: 'Opening secure ChatGPT sign-in…',
+    authRetry: 'Sign in with ChatGPT',
+    authReopen: 'Reopen sign-in',
+    authFailed: 'Unable to sign in. Retry with the button below.',
     failedStart: 'Failed to start: ',
     unknownError: 'unknown error',
     cacheChecking: 'Checking cache…',
@@ -34,7 +40,7 @@ const P_I18N = {
     cacheTotal: 'Total: ',
     cacheClear: 'Clear cache',
     labelModel: 'Codex model',
-    bridgeHint: 'Uses your Codex login. Start the local bridge with npm start.',
+    bridgeHint: 'Connects automatically. Sign in on the official ChatGPT page when prompted.',
     labelWhisper: 'Transcription (local, WebGPU)',
     optTiny: 'Tiny — fastest, least accurate',
     optBase: 'Base — balanced (recommended)',
@@ -50,7 +56,12 @@ const P_I18N = {
     btnStart: 'Avvia il Fact-Checking',
     btnStop: 'Ferma il Fact-Checking',
     hintBridge: 'Codex collegato. Pronto per iniziare.',
-    bridgeWarnText: '⚠ Bridge non avviato — avvialo (vedi README).',
+    bridgeWarnText: 'Installa una sola volta l’assistente locale InTruth, poi riapri questo popup. Vedi README → Installazione automatica.',
+    authPending: 'Completa l’accesso nella scheda ChatGPT. Il collegamento si aggiorna automaticamente.',
+    authRequired: 'Apertura dell’accesso sicuro ChatGPT…',
+    authRetry: 'Accedi a ChatGPT',
+    authReopen: 'Riapri accesso',
+    authFailed: 'Accesso non riuscito. Riprova con il pulsante qui sotto.',
     failedStart: 'Avvio non riuscito: ',
     unknownError: 'errore sconosciuto',
     cacheChecking: 'Controllo della cache…',
@@ -59,7 +70,7 @@ const P_I18N = {
     cacheTotal: 'Totale: ',
     cacheClear: 'Svuota cache',
     labelModel: 'Modello Codex',
-    bridgeHint: 'Usa il tuo accesso Codex. Avvia il bridge locale con npm start.',
+    bridgeHint: 'Si collega automaticamente. Quando richiesto, accedi sulla pagina ufficiale ChatGPT.',
     labelWhisper: 'Trascrizione (locale, WebGPU)',
     optTiny: 'Tiny — il più veloce, meno accurato',
     optBase: 'Base — bilanciato (consigliato)',
@@ -124,17 +135,37 @@ modelEl.addEventListener('change', async () => {
   }
 });
 
+let checkingBridge = false;
+let automaticLoginRequested = false;
+async function requestSignIn(retry = false) {
+  authBtn.disabled = true;
+  try {
+    const result = await chrome.runtime.sendMessage({ type: 'AUTH_CODEX', retry });
+    if (!result?.ok) throw new Error('Sign-in failed.');
+  } catch { bridgeWarningEl.textContent = pt('authFailed'); }
+  finally { authBtn.disabled = false; }
+}
+authBtn.addEventListener('click', () => requestSignIn(true));
 async function refreshBridgeWarning() {
+  if (checkingBridge) return;
+  checkingBridge = true;
   let detail = '';
   try {
-    const response = await fetch(BRIDGE_URL + '/health', { signal: AbortSignal.timeout(1500) });
-    const health = await response.json();
-    bridgeReady = response.ok && health.service === 'intruth-codex' && health.protocol === 2 && health.ready === true;
-    detail = health.error || '';
-  } catch { bridgeReady = false; }
+    const health = await InTruthConnection.health();
+    bridgeReady = health.ready === true;
+    const state = health.auth?.state;
+    authBtn.hidden = bridgeReady || !health.auth?.canLogin;
+    authBtn.textContent = pt(state === 'pending' ? 'authReopen' : 'authRetry');
+    detail = state === 'pending' ? pt('authPending') : state === 'required' ? pt('authRequired') : health.auth?.error || health.error || '';
+    if (!automaticLoginRequested && ['required', 'pending'].includes(state)) {
+      automaticLoginRequested = true;
+      await requestSignIn();
+    }
+  } catch { bridgeReady = false; authBtn.hidden = true; }
   bridgeWarningEl.hidden = bridgeReady;
   bridgeWarningEl.textContent = detail || pt('bridgeWarnText');
   updateHint();
+  checkingBridge = false;
 }
 
 function updateHint() {
@@ -143,7 +174,7 @@ function updateHint() {
   keyHint.className = 'key-hint' + (bridgeReady ? ' ok' : '');
 }
 refreshBridgeWarning();
-const bridgePollTimer = setInterval(refreshBridgeWarning, 4000);
+const bridgePollTimer = setInterval(refreshBridgeWarning, 2000);
 window.addEventListener('pagehide', () => clearInterval(bridgePollTimer));
 
 // ── Downloaded Whisper models (Transformers.js browser cache) ────────────────

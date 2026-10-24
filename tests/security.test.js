@@ -38,7 +38,7 @@ function mergeFixture() {
     head: { sha, ref: 'dependabot/npm_and_yarn/tool-1.2.4', repo: { full_name: 'owner/repo' } } };
   const pr = { ...candidate, base: { sha: base, ref: 'master' }, mergeable: true, mergeable_state: 'clean' };
   const run = { id: 123, path: '.github/workflows/check.yml', status: 'completed', conclusion: 'success', head_sha: sha };
-  const jobs = ['check (22)', 'check (24)', 'check (26)', 'browser', 'audit', 'osv / osv-scan',
+  const jobs = ['setup-platforms (windows-latest)', 'setup-platforms (macos-latest)', 'check (22)', 'check (24)', 'check (26)', 'browser', 'audit', 'osv / osv-scan',
     'codeql (javascript-typescript)', 'codeql (actions)', 'secrets', 'workflow-security', 'Security gate']
     .map(name => ({ name, conclusion: 'success' }));
   const state = { pr, jobs, behind: 0, commits: [{ author: { login: bot }, commit: { verification: { verified: true } } }],
