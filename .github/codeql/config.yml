@@ -1,0 +1,5 @@
+name: InTruth security analysis
+paths-ignore:
+  - realtime-factcheck/src/vendor
+  - node_modules
+  - dist

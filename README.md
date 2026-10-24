@@ -21,7 +21,7 @@ installato dal lockfile del progetto. Il bridge deve essere avviato **sullo
 stesso computer del browser**, anche se sviluppi il progetto con Codex nel cloud.
 
 ```sh
-git clone --branch codex/full-migration https://github.com/SiNaPsEr0x/intruth-factcheck.git
+git clone https://github.com/SiNaPsEr0x/intruth-factcheck.git
 cd intruth-factcheck
 npm install --global npm@12.2.1
 npm ci
@@ -31,8 +31,7 @@ npm run verify
 npm start
 ```
 
-La branch indicata contiene l'adattamento nella PR #6. Dopo il merge puoi usare
-la branch predefinita. Se hai scaricato lo ZIP, estrailo e parti da `npm ci`
+Se hai scaricato lo ZIP, estrailo e parti da `npm ci`
 nella cartella con `package.json`. Lascia aperto il terminale del bridge.
 `npm ci` installa le versioni bloccate di CLI e strumenti di sviluppo; i file
 browser già pronti sono inclusi. Non serve ricompilarli per usare l'estensione.
@@ -209,6 +208,36 @@ La CI controlla Node 22/24/26, riproducibilità dei bundle e UI/MV3 nel browser.
 Dettagli: [architettura](docs/ARCHITECTURE.md), [migrazione](docs/MIGRATION.md),
 [software](docs/SOFTWARE.md), [validazione](docs/VALIDATION.md).
 
+## Sicurezza e correzioni automatiche
+
+A ogni PR, push su `master`, avvio manuale e ogni notte, GitHub Actions esegue:
+
+- **OSV-Scanner** sul lockfile e sullo SBOM di Transformers/ONNX distribuiti.
+- **npm audit** anche sulle dipendenze di sviluppo, senza soglia minima esclusa.
+- **CodeQL security-extended** su JavaScript e GitHub Actions; i risultati SARIF
+  sono caricati in Security e i finding bloccano il gate anche se già presenti.
+- **Gitleaks** sull'intera cronologia Git, con valori oscurati; **actionlint** e
+  **zizmor** sui workflow e sulla configurazione Dependabot.
+- Test Node 22/24/26, browser/MV3, checksum, ricostruzione dei bundle e ZIP.
+
+**Dependabot** propone aggiornamenti npm e delle Actions. La manutenzione
+quotidiana applica anche `npm audit fix --package-lock-only --ignore-scripts`
+creando una PR dedicata, senza `--force`. Una scansione fallita su `master`
+attiva un tentativo di riparazione del lockfile. Se non esiste una correzione
+compatibile, la vulnerabilità rimane visibile e il gate rimane rosso.
+
+Il merge automatico accetta soltanto commit firmati dei bot previsti, modifiche
+limitate a dipendenze o SHA delle stesse Actions, aggiornamenti compatibili e
+**tutti** i controlli superati sul commit esatto e su una branch aggiornata.
+Aggiornamenti major, minor pre-1.0, cambi a script/codice e revisioni bloccanti
+richiedono revisione. I runtime vendorizzati che richiedono un rebuild coordinato
+restano bloccati finché bundle, checksum e SBOM non sono aggiornati insieme.
+
+Non serve una chiave esterna per gli scanner. GitHub deve consentire alle
+Actions di creare PR; la funzione di manutenzione segnala un errore se questa
+impostazione è disattivata. Dettagli, limiti e controlli del 24 ottobre:
+[SECURITY.md](SECURITY.md).
+
 ## Problemi comuni
 
 - **Bridge non raggiungibile:** esegui `npm start` sul PC del browser. Un server
@@ -236,7 +265,7 @@ stable ONNX Runtime 1.30.0, esbuild 0.28.2 and Playwright 1.64.1.
 The browser bundle is rebuilt to avoid upstream's development ORT dependency.
 See [software versions](docs/SOFTWARE.md).
 
-Clone branch `codex/full-migration` (PR #6), run `npm ci`,
+Clone the default branch, run `npm ci`,
 `npm exec -- codex login`, `npm run check`, `npm run verify`, then `npm start`.
 Keep the bridge running **on the browser's computer**. In `chrome://extensions`,
 enable Developer mode and load `realtime-factcheck` unpacked. Reload a supported

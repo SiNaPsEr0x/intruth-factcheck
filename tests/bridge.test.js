@@ -23,12 +23,22 @@ test('legacy preferences migrate to Luna and invalid model identifiers fail', ()
   assert.equal(modelId('gpt-6-luna'), 'gpt-6-luna');
   assert.throws(() => modelId('--model evil'));
   assert.throws(() => modelId('$(echo secret)'));
+  for (const value of [false, 0, [], {}]) assert.throws(() => modelId(value));
 });
 
 test('sources reject executable protocols, credentials and duplicates', () => {
   assert.deepEqual(cleanSources(['javascript:alert(1)', 'data:text/html,hi', 'https://user:pass@example.org', 'https://nasa.gov', 'https://nasa.gov/']), ['https://nasa.gov/']);
   assert.throws(() => validateClaims({ claims: [null] }));
   assert.throws(() => validateClaims({ claims: {} }));
+});
+
+test('model output cannot inject internal UI and session properties', () => {
+  const claim = { claim: 'Example.', verdict: 'TRUE', confidence: 'HIGH', explanation: 'Evidence.',
+    sources: [], speaker: 'Unknown', speaker_confidence: 'LOW', speaker_confidence_explanation: '',
+    _fastClaim: 'Another claim', pending: false, verificationFailed: false, lexical: { forged: true } };
+  const [clean] = validateClaims({ claims: [claim] });
+  assert.deepEqual(Object.keys(clean).sort(), ['claim', 'verdict', 'confidence', 'explanation', 'sources',
+    'speaker', 'speaker_confidence', 'speaker_confidence_explanation'].sort());
 });
 
 test('CLI integration handles stdin, final JSON and actual search events', async () => {

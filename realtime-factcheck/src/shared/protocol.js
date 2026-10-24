@@ -7,7 +7,8 @@
   const CONFIDENCE = ['HIGH', 'MEDIUM', 'LOW'];
   const LEGACY_MODELS = /^(haiku|sonnet|opus|claude.*)$/i;
   function modelId(value) {
-    if (!value || LEGACY_MODELS.test(value)) return DEFAULT_MODEL;
+    if (value === undefined || value === null || value === '') return DEFAULT_MODEL;
+    if (typeof value === 'string' && LEGACY_MODELS.test(value)) return DEFAULT_MODEL;
     if (typeof value !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,99}$/.test(value)) {
       throw new Error('Invalid Codex model identifier.');
     }
@@ -40,7 +41,11 @@
           claim.sources.some(url => typeof url !== 'string')) {
         throw new Error('Codex returned an invalid claim or verdict.');
       }
-      return { ...claim, sources: cleanSources(claim.sources) };
+      // Model output must never introduce internal UI/session control fields.
+      return { claim: claim.claim, verdict: claim.verdict, confidence: claim.confidence,
+        explanation: claim.explanation, sources: cleanSources(claim.sources),
+        speaker: claim.speaker, speaker_confidence: claim.speaker_confidence,
+        speaker_confidence_explanation: claim.speaker_confidence_explanation };
     });
   }
   const api = { DEFAULT_MODEL, BRIDGE_URL, VERDICTS, CONFIDENCE, modelId, cleanSources, validateClaims };

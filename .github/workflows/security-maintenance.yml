@@ -1,0 +1,93 @@
+name: Security maintenance
+on:
+  push:
+    branches: [master]
+    paths: ['.github/workflows/security-maintenance.yml', 'scripts/security/**']
+  schedule:
+    - cron: '43 4 * * *'
+  workflow_dispatch:
+  # Metadata-only merge handler: default-branch code, signed bot commits, no PR artifacts.
+  workflow_run: # zizmor: ignore[dangerous-triggers]
+    workflows: [Check InTruth Codex]
+    types: [completed]
+permissions:
+  contents: read
+concurrency:
+  group: security-maintenance-${{ github.event_name }}-${{ github.event.workflow_run.head_branch || github.ref }}
+  cancel-in-progress: false
+jobs:
+  audit-fix:
+    if: >-
+      github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.conclusion == 'failure' &&
+       github.event.workflow_run.head_branch == 'master' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+    steps:
+      # Only default-branch code is executed with the maintenance token.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: master
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - name: Apply compatible lockfile fixes without lifecycle scripts
+        run: |
+          set +e
+          npm audit fix --package-lock-only --ignore-scripts > "$RUNNER_TEMP/audit-fix.log" 2>&1
+          status=$?
+          set -e
+          cat "$RUNNER_TEMP/audit-fix.log"
+          if [ "$status" -gt 1 ]; then exit "$status"; fi
+          git diff --exit-code -- package.json
+          npm ci --ignore-scripts
+          npm test
+          npm run lint
+      - uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8
+        id: fix
+        with:
+          branch: security/npm-audit-fix
+          base: master
+          add-paths: package-lock.json
+          sign-commits: true
+          commit-message: 'fix(deps): apply compatible npm security fixes'
+          title: 'fix(deps): apply compatible npm security fixes'
+          body: |
+            Automated compatible fixes from `npm audit fix --package-lock-only --ignore-scripts`.
+            No force upgrades or lifecycle scripts. The complete CI, browser and security gates must pass before automatic integration.
+            Remaining vulnerabilities or incompatible updates block automatic integration.
+      - name: Run the full CI explicitly for the bot-created PR
+        if: steps.fix.outputs.pull-request-number != ''
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        with:
+          script: |
+            await github.rest.actions.createWorkflowDispatch({
+              ...context.repo, workflow_id: 'check.yml', ref: 'security/npm-audit-fix'
+            });
+  merge-verified-updates:
+    if: >-
+      github.event_name == 'workflow_run' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+    steps:
+      # Never check out a PR head, execute its scripts, or download its artifacts here.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: master
+          persist-credentials: false
+      - uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        with:
+          script: |
+            await require('./scripts/security/merge-updates.cjs')({ github, context, core });
