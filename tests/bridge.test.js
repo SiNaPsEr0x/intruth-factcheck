@@ -18,9 +18,10 @@ async function start(t, options = {}) {
   return `http://127.0.0.1:${server.address().port}`;
 }
 
-test('legacy preferences migrate to Luna and invalid model identifiers fail', () => {
-  for (const value of [undefined, '', 'haiku', 'sonnet', 'opus', 'claude-opus-4']) assert.equal(modelId(value), 'gpt-6-luna');
+test('default model and exact identifiers are validated', () => {
+  for (const value of [undefined, null, '']) assert.equal(modelId(value), 'gpt-6-luna');
   assert.equal(modelId('gpt-6-luna'), 'gpt-6-luna');
+  assert.equal(modelId('custom-model-v1'), 'custom-model-v1');
   assert.throws(() => modelId('--model evil'));
   assert.throws(() => modelId('$(echo secret)'));
   for (const value of [false, 0, [], {}]) assert.throws(() => modelId(value));
@@ -102,7 +103,7 @@ test('HTTP rejects web origins, rebinding, invalid payloads and oversized reques
   assert.equal((await post(JSON.stringify({ ...payload, model: '--help' }))).status, 400);
   assert.equal((await post('x'.repeat(129 * 1024))).status, 413);
   assert.equal((await post(JSON.stringify(payload), { 'Content-Type': 'text/plain' })).status, 415);
-  assert.equal((await fetch(base + '/v1/messages', { method: 'POST', headers, body: '{}' })).status, 404);
+  assert.equal((await fetch(base + '/v1/not-found', { method: 'POST', headers, body: '{}' })).status, 404);
 });
 
 test('preflight permits extension private-network access and supports pinning', async t => {

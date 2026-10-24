@@ -40,7 +40,6 @@ The response contains `claims`, `model`, and `searched`. Claims have the exact
 fields specified in the schema. HTTP errors use `{"error":{"message":"..."}}`:
 400 invalid input, 403 rejected Host/Origin, 413 body limit, 415 wrong content
 headers, 429 concurrency limit, 503 CLI not ready, 502 inference/search failure.
-The old Anthropic-shaped `/v1/messages` endpoint is removed.
 
 Native `codex exec --json` events establish whether a web-search item completed;
 merely asking the model to search is insufficient. The final response is read

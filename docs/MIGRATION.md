@@ -1,51 +1,46 @@
-# Migration from the Claude version
+# InTruth Codex upgrade guide
 
-The complete tracked application surface was reviewed: bridge/reproduction code,
-MV3 manifest, service worker, offscreen transcription, worklet, popup, overlay,
-lexical features, export, styles, vendored assets, README, ignore rules and license.
-Vendor bundles were inspected for integration/version and preserved, not audited
-line by line or upgraded.
+## Automatic setup (2.2.0)
 
-| Before | After |
-| --- | --- |
-| Anthropic browser API or optional Claude Code bridge | Codex CLI bridge is the only inference path |
-| Claude Haiku/Sonnet/Opus | Explicit `gpt-6-luna` default; exact custom IDs supported |
-| Browser API-key field and stored key | Codex login; legacy key removed from local extension storage |
-| Anthropic Messages request/response emulation | Dedicated InTruth protocol v2 and schema-validated claims |
-| Claude `WebSearch`/`WebFetch` flags | Codex native `web_search=live`, with completed search event required |
-| Permission bypass and user-specific Windows repro | Read-only inference without shell launch; portable CLI resolver; obsolete repro removed |
-| Startup paid inference with optimistic auth messages | Local CLI/login check; separate explicit live `verify` |
-| Deduplication lost short numbers and non-Latin text | Unicode/numeric-preserving keys and stricter similarity |
-| Unbounded parallel processes | Concurrency/body/output limits and bounded extension queue |
-| TRUE answers protected from contrary web evidence | Evidence can correct any preliminary verdict |
-| Failed grounding kept preliminary certainty | Failed/missing evidence becomes UNVERIFIABLE/LOW |
-| First arbitrary pending card could receive another claim's update | Full original claim key, per-card update, export upsert |
-| Pending failures could disappear from reports | Timed-out checks finalize as unverified; late answers update the same log entry |
-| Claims could arrive after switching sessions | Generation guards, fetch cancellation, queue rejection |
-| Whisper buffer slicing by snapshot length | Absolute sample positions preserve incoming speech under rolling-buffer overflow |
-| Implicitly assigning title participant order to speaker IDs | Participant context without claiming audio diarization |
-| Upload/update date treated as event date | Optional user recording date; explicit creation metadata only |
-| Remote Google Fonts and Anthropic host permission | System font fallback; unnecessary host permissions removed |
-| No build/test workflow | Node offline tests, syntax/manifest checks, optional real-Chromium smoke and portable ZIP packaging |
+1. Extract the updated project and run `Install-InTruth.cmd` on Windows or
+   `Install-InTruth.command` on macOS/Linux once, on the browser's computer.
+2. Load or reload the `realtime-factcheck` folder in Chrome.
+3. Open InTruth. The local helper starts automatically and reuses the Codex
+   session. If sign-in is required, complete it on the official ChatGPT page;
+   the popup becomes ready automatically.
 
-The original `bridge/warm-bridge.js` command remains as a short compatibility
-entry point; it invokes the new Codex implementation. Replace old shortcuts with
-`npm start` when convenient. Old Claude environment overrides are no longer used.
+The extension's stable ID is `ihohghmjebpjjlehnbdknchigighdlke`. An older unpacked
+installation may need to be removed and loaded again, which can reset extension
+preferences. Codex credentials remain managed outside the extension. Close a
+manually running 2.1 bridge once to release port 8787 before using automatic startup.
 
-The original license and author attribution are retained. The extension remains
-focused on the originally supported YouTube/Jubilee sites; no all-sites browsing
-permission was added.
+Only supported model, transcription, language, recording-date and panel-layout
+preferences are retained in extension storage. Model identifiers are passed
+exactly as entered; the initial default is `gpt-6-luna` with `low` reasoning.
 
-## Stable software refresh (2.1.0)
+## Runtime and verification
 
-- Updated Codex CLI to 0.164.0, Transformers.js to 4.3.1 and ONNX Runtime
-  Web/Common to stable 1.30.0; replaced asyncify with the matching JSEP pair.
-- Rebuilt the upstream web-only Transformers bundle instead of shipping its
-  development ORT dependency. Added upstream integrity and artifact checksums.
-- Added exact developer dependencies and package-lock.json, npm 12.2.1 and
-  Node 26.12.1 selectors; the bridge prefers the pinned local Codex CLI.
-- Updated all three GitHub Actions to their latest stable releases and expanded
-  CI to Node 22/24/26 plus native browser tests.
-- Replaced the Python browser script with pinned JavaScript Playwright 1.64.1.
-  Added actual MV3 pipeline and real Whisper/translation inference checks.
-- Updated README, software inventory, validation record, packaging and notices.
+- Codex CLI is the inference provider, using protocol v2 and schema-validated claims.
+- Managed sign-in and token refresh belong to Codex; no credential is pasted into the popup.
+- Inference runs in a read-only, ephemeral session with shell, apps, plugins and hooks disabled.
+- Native web-search completion and usable sources are required for verified results.
+- Failed or missing verification remains UNVERIFIABLE/LOW; evidence can correct any preliminary verdict.
+- Concurrency, request/output limits, bounded queues and session-generation checks protect the pipeline.
+- Transcript buffering preserves new speech; claim matching retains numbers and Unicode text.
+- Reports retain final verdicts and sources, including corrected late results.
+
+The `bridge/warm-bridge.js` entry point remains compatible with manual startup.
+Use `npm run check` for local CLI readiness and the explicit `verify` / `verify:web`
+commands to test real model and search access. Browser fixtures do not establish
+account entitlement. Hardware audio capture and WebGPU need a local check.
+
+## Stable browser stack (2.1.0)
+
+The pinned stack uses Codex CLI 0.164.0, Transformers.js 4.3.1, stable ONNX Runtime
+Web/Common 1.30.0, npm 12.2.1 and Playwright 1.64.1. The web bundle is rebuilt
+against the stable runtime with verified package integrity, artifact checksums
+and matching JavaScript/WASM assets. See SOFTWARE.md and VALIDATION.md.
+
+CI covers Node 22/24/26, Windows/macOS setup, browser/MV3 integration, portable
+ZIPs and security scans. The original license and author attribution remain in
+LICENSE and NOTICE.md. Supported browsing stays limited to YouTube/Jubilee.
