@@ -1,11 +1,7 @@
-# Service worker contains API keys 
-src/background/service-worker.js
-src/offscreen/offscreen.js
-
-# OS
+# Local environment and editor files
+.env
+.env.*
 .DS_Store
 Thumbs.db
-
-# Editor
 .vscode/
 .idea/

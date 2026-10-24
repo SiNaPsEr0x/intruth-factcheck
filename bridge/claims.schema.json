@@ -1,0 +1,26 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["claims"],
+  "properties": {
+    "claims": {
+      "type": "array",
+      "maxItems": 3,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["claim", "verdict", "confidence", "explanation", "sources", "speaker", "speaker_confidence", "speaker_confidence_explanation"],
+        "properties": {
+          "claim": { "type": "string" },
+          "verdict": { "type": "string", "enum": ["TRUE", "SUBSTANTIALLY TRUE", "FALSE", "MISLEADING", "UNVERIFIABLE"] },
+          "confidence": { "type": "string", "enum": ["HIGH", "MEDIUM", "LOW"] },
+          "explanation": { "type": "string" },
+          "sources": { "type": "array", "items": { "type": "string" } },
+          "speaker": { "type": "string" },
+          "speaker_confidence": { "type": "string", "enum": ["HIGH", "MEDIUM", "LOW"] },
+          "speaker_confidence_explanation": { "type": "string" }
+        }
+      }
+    }
+  }
+}

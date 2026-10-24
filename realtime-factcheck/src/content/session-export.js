@@ -1,12 +1,17 @@
 // session-export.js
 // Handles session logging and PDF export.
-// Loaded after overlay.js 
+// Loaded before overlay.js; translation helpers are resolved when exporting.
 
 const sessionLog = [];
 let sessionStartTime = null;
 
 function logVerdict(result) {
-  sessionLog.push({
+  const claimId = (result._fastClaim || result.claim).toLowerCase();
+  const existing = sessionLog.find(entry => entry.claimId === claimId);
+  const entry = {
+    claimId,
+    model: result.model || InTruthProtocol.DEFAULT_MODEL,
+    verificationFailed: result.verificationFailed === true,
     timestamp: new Date().toISOString(),
     secondsElapsed: sessionStartTime ? Math.round((Date.now() - sessionStartTime) / 1000) : 0,
     claim: result.claim,
@@ -16,8 +21,10 @@ function logVerdict(result) {
     speakerConfidence: result.speaker_confidence,
     speakerExplanation: result.speaker_confidence_explanation,
     speakerName: result.speaker || null,
-    sources: result.sources ?? [],
-  });
+    sources: InTruthProtocol.cleanSources(result.sources),
+  };
+  if (existing) Object.assign(existing, entry, { timestamp: existing.timestamp, secondsElapsed: existing.secondsElapsed });
+  else sessionLog.push(entry);
 }
 
 function startSession() {
@@ -48,7 +55,7 @@ function exportPDF() {
   };
 
   // group by speaker
-  const speakerGroups = {};
+  const speakerGroups = Object.create(null);
   const speakerOrder  = [];
   sessionLog.forEach((entry, i) => {
     // filter out unresolved Speaker N labels — group under Unknown
@@ -78,7 +85,7 @@ function exportPDF() {
       const sourcesHTML = entry.sources.length
         ? '<div class="sources"><span class="sources-label">' + escapeHtml(t('pdfSources')) + '</span>' +
           entry.sources.map((url, j) =>
-            '<a href="' + escapeHtml(url) + '" class="source-link">' + escapeHtml(t('pdfSource')) + ' ' + (j + 1) + '</a>'
+            '<a href="' + escapeHtml(url) + '" rel="noopener noreferrer" class="source-link">' + escapeHtml(t('pdfSource')) + ' ' + (j + 1) + '</a>'
           ).join('') + '</div>'
         : '';
 
@@ -90,7 +97,7 @@ function exportPDF() {
           '<span class="timestamp">' + escapeHtml(timestamp) + '</span>' +
         '</div>' +
         '<div class="claim-text">"' + escapeHtml(entry.claim) + '"</div>' +
-        '<div class="explanation">' + escapeHtml(entry.explanation) + '</div>' +
+        '<div class="explanation">' + escapeHtml(entry.verificationFailed ? t('verificationFailed') : entry.explanation) + '</div>' +
         '<div class="speaker-row"><span class="speaker-label">' + escapeHtml(t('speakerConviction').trim()) + '</span> ' +
           escapeHtml(entry.speakerConfidence ? tEnum('confidence', entry.speakerConfidence) : t('notAvailable')) +
         '</div>' +
@@ -144,6 +151,7 @@ function exportPDF() {
       '<div class="report-meta">' +
         '<span>📺 ' + escapeHtml(pageTitle) + '</span>' +
         '<span>🕐 ' + escapeHtml(exportDate) + '</span>' +
+        '<span>Codex: ' + escapeHtml([...new Set(sessionLog.map(entry => entry.model))].join(', ')) + '</span>' +
         '<span>📋 ' + sessionLog.length + ' ' + (sessionLog.length !== 1 ? t('pdfClaimPlural') : t('pdfClaimSingular')) + ' ' + (sessionLog.length !== 1 ? t('pdfDetectedPlural') : t('pdfDetectedSingular')) + '</span>' +
       '</div>' +
     '</div>' +

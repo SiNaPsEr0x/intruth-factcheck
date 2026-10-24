@@ -1,35 +1,27 @@
 {
   "manifest_version": 3,
-  "name": "InTruth",
-  "version": "1.1.9",
-  "description": "Real-time fact-checking of political speech and debates",
-
+  "name": "InTruth \u00b7 Codex",
+  "version": "2.1.0",
+  "description": "Live fact-checking with on-device Whisper transcription and your local Codex CLI.",
   "permissions": [
     "activeTab",
     "storage",
     "tabCapture",
     "offscreen"
   ],
-
   "host_permissions": [
-    "https://api.anthropic.com/*",
-    "https://fonts.googleapis.com/*",
-    "https://fonts.gstatic.com/*",
     "https://huggingface.co/*",
     "https://*.huggingface.co/*",
     "https://*.hf.co/*",
     "http://127.0.0.1:8787/*",
     "http://localhost:8787/*"
   ],
-
   "content_security_policy": {
     "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
   },
-
   "background": {
     "service_worker": "src/background/service-worker-ex.js"
   },
-
   "action": {
     "default_popup": "src/popup/popup.html",
     "default_icon": {
@@ -38,7 +30,6 @@
       "128": "assets/icon128.png"
     }
   },
-
   "content_scripts": [
     {
       "matches": [
@@ -47,17 +38,20 @@
         "https://*.jubilee.com/*"
       ],
       "js": [
+        "src/shared/protocol.js",
         "src/content/lexical-features.js",
         "src/content/session-export.js",
         "src/content/overlay.js"
       ],
-      "css": ["src/content/overlay.css"]
+      "css": [
+        "src/content/overlay.css"
+      ]
     }
   ],
-
   "icons": {
     "16": "assets/icon16.png",
     "48": "assets/icon48.png",
     "128": "assets/icon128.png"
-  }
+  },
+  "minimum_chrome_version": "116"
 }

@@ -2,6 +2,7 @@
 <html>
 <head>
   <meta charset="utf-8"/>
+  <title>InTruth · Codex</title>
   <link rel="stylesheet" href="popup.css"/>
 </head>
 <body>
@@ -16,19 +17,11 @@
     <div class="keys-section" id="keysSection">
       <div class="key-field">
         <label class="key-label" data-i18n="labelModel">Model</label>
-        <select class="key-input key-select" id="modelSelect">
-          <option value="haiku" data-i18n="optHaiku">Haiku — fastest, cheapest</option>
-          <option value="sonnet" data-i18n="optSonnet">Sonnet — balanced</option>
-          <option value="opus" data-i18n="optOpus">Opus — most capable</option>
-        </select>
+        <input class="key-input" id="modelSelect" type="text" value="gpt-6-luna" placeholder="gpt-6-luna" maxlength="100" autocomplete="off" spellcheck="false" aria-label="Codex model"/>
       </div>
       <div class="key-field">
-        <label class="key-toggle">
-          <input type="checkbox" id="useBridge"/>
-          <span data-i18n="useBridge">Use local subscription (warm bridge)</span>
-        </label>
-        <div class="key-hint" id="bridgeHint" data-i18n="bridgeHint">Runs Claude via your subscription — start <code>warm-bridge.js</code> first.</div>
-        <div class="bridge-warning" id="bridgeWarning" data-i18n="bridgeWarnText" hidden>⚠ Bridge not running — start it (see README).</div>
+        <div class="key-hint" data-i18n="bridgeHint">Uses your Codex login. Start the local bridge with npm start.</div>
+        <div class="bridge-warning" id="bridgeWarning" role="status" hidden></div>
       </div>
       <div class="key-field" id="whisperModelField">
         <label class="key-label" data-i18n="labelWhisper">Transcription (local, WebGPU)</label>
@@ -48,10 +41,6 @@
           <span class="cache-total" id="cacheTotal"></span>
           <button class="cache-clear" id="cacheClearBtn" data-i18n="cacheClear" hidden>Clear cache</button>
         </div>
-      </div>
-      <div class="key-field" id="apiKeyField">
-        <label class="key-label" data-i18n="labelApiKey">Anthropic API Key</label>
-        <input class="key-input" id="anthropicKey" type="password" placeholder="sk-ant-..." autocomplete="off"/>
       </div>
       <div class="key-field">
         <label class="key-label" data-i18n="labelLanguage">Language</label>
@@ -78,11 +67,16 @@
           </select>
         </div>
       </div>
-      <div class="key-hint" id="keyHint"></div>
+      <div class="key-field">
+        <label class="key-label" for="recordingDate" data-i18n="labelDate">Recording date (optional)</label>
+        <input class="key-input" id="recordingDate" type="date"/>
+      </div>
+      <div class="key-hint" id="keyHint" role="status" aria-live="polite"></div>
     </div>
 
-    <button class="toggle-btn" id="toggleBtn" data-i18n="btnStart">Start Fact-Checking</button>
+    <button class="toggle-btn" id="toggleBtn" disabled data-i18n="btnStart">Start Fact-Checking</button>
   </div>
+  <script src="../shared/protocol.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>

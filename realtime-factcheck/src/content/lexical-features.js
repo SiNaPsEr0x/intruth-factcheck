@@ -152,7 +152,7 @@ function extractLexicalFeatures(text, durationSeconds) {
     },
     commitmentScore,
     commitmentLabel,
-    // human-readable summary for Claude
+    // human-readable summary for Codex
     summary: buildSummary({
       wordCount, wordsPerSecond, hedgingCount, certaintyCount,
       emotionalCount, fillerCount, exclusiveCount,

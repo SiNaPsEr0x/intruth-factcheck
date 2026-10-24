@@ -19,7 +19,7 @@ const I18N = {
     unverified: '⚠ unverified',
     newSpeakerQuestion: 'New speaker detected — who is this?',
     skip: 'Skip',
-    exportTitle: 'Export session as PDF',
+    exportTitle: 'Export HTML report (printable as PDF)',
     exportBtn: '↓ Export',
     transcript: 'Transcript',
     claims: 'Claims',
@@ -42,6 +42,7 @@ const I18N = {
     rateModerate: 'moderate',
     source: 'Source',
     verifying: '⟳ verifying...',
+    verificationFailed: 'Web verification failed. This claim remains unverified.',
     certaintySuffix: ' certainty',
     speakerConviction: 'Speaker conviction: ',
     notAvailable: 'N/A',
@@ -98,6 +99,7 @@ const I18N = {
     rateModerate: 'moderata',
     source: 'Fonte',
     verifying: '⟳ verifica in corso...',
+    verificationFailed: 'Verifica web non riuscita. L’affermazione resta non verificata.',
     certaintySuffix: ' di certezza',
     speakerConviction: 'Convinzione dello speaker: ',
     notAvailable: 'N/D',
@@ -151,22 +153,17 @@ let interimEl = null;
 let claimFeedEl = null;
 let verdictListEl = null;
 let transcriptCollapsed = false;
+const verdictCards = new Map();
 const pendingCards    = new Map();
 const pendingCardTimes = new Map();
 
-// expire pending cards after 90 seconds
+// A stalled check is visibly unverified; a late answer can still replace it.
 setInterval(() => {
-  const now = Date.now();
   for (const [key, time] of pendingCardTimes) {
-    if (now - time > 90000) {
+    if (Date.now() - time > 180000) {
       const card = pendingCards.get(key);
-      if (card) {
-        card.classList.remove('rtfc-verdict--pending');
-        const verifying = card.querySelector('.rtfc-verifying');
-        if (verifying) verifying.textContent = t('unverified');
-      }
-      pendingCards.delete(key);
-      pendingCardTimes.delete(key);
+      if (card?._resultData) updateVerdict({ ...card._resultData, _fastClaim: card._resultData.claim,
+        verdict: 'UNVERIFIABLE', confidence: 'LOW', sources: [], pending: false, verificationFailed: true });
     }
   }
 }, 15000);
@@ -360,11 +357,8 @@ function retryTagAllCards() {
 // ── Speaker editor ───────────────────────────────────────────────────────────
 
 function sendSpeakerMap() {
-  // speaker IDs are assigned in order of first appearance
-  // We map ID 0 → speakers[0], ID 1 → speakers[1], etc.
-  const speakerIdToName = {};
-  speakers.forEach((name, i) => { speakerIdToName[i] = name; });
-  chrome.runtime.sendMessage({ type: 'SPEAKER_NAMES', speakerIdToName });
+  // Whisper has no diarization: participant list order does not identify turns.
+  chrome.runtime.sendMessage({ type: 'SPEAKER_NAMES', participants: speakers });
 }
 
 function renderSpeakerEditor() {
@@ -397,7 +391,9 @@ function renderSpeakerEditor() {
       e.target.closest('.rtfc-speaker-chip').style.color = getSpeakerColor(newName);
       sendSpeakerMap(); // update service worker with new names
 
-      // re-render all verdict cards to update speaker tags
+      for (const card of verdictCards.values()) if (card._resultData?.speaker === oldName) card._resultData.speaker = newName;
+      for (const entry of sessionLog) if (entry.speakerName === oldName) entry.speakerName = newName;
+      // Update visible speaker tags.
       const cards = verdictListEl?.querySelectorAll('.rtfc-speaker-tag');
       if (cards) {
         cards.forEach(tag => {
@@ -518,6 +514,7 @@ function removePanel() {
   claimFeedEl = null;
   verdictListEl = null;
   transcriptCollapsed = false;
+  verdictCards.clear();
   pendingCards.clear();
   pendingCardTimes.clear();
   speakers = [];
@@ -656,7 +653,7 @@ function buildCard(result) {
 
   const card = document.createElement('div');
   card.className = 'rtfc-verdict rtfc-verdict--' + color + (result.pending ? ' rtfc-verdict--pending' : '');
-  card.dataset.claim = result.claim.toLowerCase().slice(0, 40);
+  card.dataset.claim = (result._fastClaim || result.claim).toLowerCase();
   if (result.dominantSpeakerId !== null && result.dominantSpeakerId !== undefined) {
     card.dataset.speakerid = String(result.dominantSpeakerId);
   }
@@ -671,16 +668,12 @@ function buildCard(result) {
 
   const lexicalRows = buildLexicalRows(result.lexical);
 
-  // speaker tag — only show when ALL speakers have been confirmed by user
-  // prevents wrong tags on cards detected before diarization stabilized
   let speakerTag = '';
-  if (!result.pending && allSpeakersConfirmed() && result.dominantSpeakerId !== null && result.dominantSpeakerId !== undefined) {
-    const confirmedName = confirmedSpeakerMap[result.dominantSpeakerId];
-    if (confirmedName) {
-      const name = normalizeSpeakerName(confirmedName);
-      const color = getSpeakerColor(name);
-      speakerTag = '<div class="rtfc-speaker-tag" style="background:' + color + '">' + escapeHtml(name) + '</div>';
-    }
+  const confirmedName = confirmedSpeakerMap[result.dominantSpeakerId];
+  const rawName = confirmedName || result.speaker;
+  if (rawName && !/^(Unknown|Other|Speaker\s*\d+)$/i.test(rawName)) {
+    const name = normalizeSpeakerName(rawName);
+    speakerTag = '<div class="rtfc-speaker-tag" style="background:' + getSpeakerColor(name) + '">' + escapeHtml(name) + '</div>';
   }
 
   card.innerHTML = [
@@ -692,7 +685,7 @@ function buildCard(result) {
       '<span class="rtfc-timestamp">' + escapeHtml(result._timestamp || '') + '</span>',
     '</div>',
     '<p class="rtfc-claim">"' + escapeHtml(result.claim) + '"</p>',
-    '<p class="rtfc-explanation">' + escapeHtml(result.explanation) + '</p>',
+    '<p class="rtfc-explanation">' + escapeHtml(result.verificationFailed ? t('verificationFailed') : result.explanation) + '</p>',
     '<div class="rtfc-speaker-confidence">',
       '<button class="rtfc-speaker-toggle">',
         '<span class="rtfc-speaker-dot rtfc-speaker-dot--' + convictionColor + '"></span>',
@@ -722,25 +715,7 @@ function buildCard(result) {
 }
 
 function findPendingCard(claim, fastClaim) {
-  // try exact match on fast claim first — grounded claim text may differ from fast pass
-  if (fastClaim) {
-    const fastKey = fastClaim.toLowerCase().slice(0, 40);
-    if (pendingCards.has(fastKey)) return pendingCards.get(fastKey);
-  }
-
-  const key = claim.toLowerCase().slice(0, 40);
-  if (pendingCards.has(key)) return pendingCards.get(key);
-
-  const claimWords = new Set(claim.toLowerCase().split(/\s+/).filter(w => w.length >= 4));
-  let bestCard = null, bestScore = 0;
-  for (const [cardKey, card] of pendingCards) {
-    const cardWords = cardKey.split(/\s+/).filter(w => w.length >= 4);
-    const overlap = cardWords.filter(w => claimWords.has(w)).length;
-    const score = overlap / Math.max(claimWords.size, cardWords.length);
-    if (score > bestScore) { bestScore = score; bestCard = card; }
-  }
-  if (bestScore >= 0.4) return bestCard;
-  return verdictListEl?.querySelector('.rtfc-verdict--pending');
+  return verdictCards.get((fastClaim || claim).toLowerCase()) || null;
 }
 
 function getVideoTimestamp() {
@@ -776,8 +751,9 @@ function addVerdict(result) {
     result.dominantSpeakerId = String(result.dominantSpeakerId);
   }
   const card = buildCard(result);
+  verdictCards.set((result._fastClaim || result.claim).toLowerCase(), card);
   if (result.pending) {
-    const key = result.claim.toLowerCase().slice(0, 40);
+    const key = result.claim.toLowerCase();
     pendingCards.set(key, card);
     pendingCardTimes.set(key, Date.now());
   } else {
@@ -800,6 +776,7 @@ function updateVerdict(result) {
     result.dominantSpeakerId = String(result.dominantSpeakerId);
   }
   const newCard = buildCard(result);
+  verdictCards.set((result._fastClaim || result.claim).toLowerCase(), newCard);
   if (existing) {
     existing.replaceWith(newCard);
     for (const [k, v] of pendingCards) {
@@ -1001,12 +978,13 @@ chrome.runtime.onMessage.addListener((msg) => {
         type:  'PAGE_TITLE',
         title: document.title || '',
         date:  (() => {
-          const el = document.querySelector('meta[itemprop="uploadDate"]') ||
-                     document.querySelector('meta[property="og:updated_time"]');
+          // Upload/update time is not necessarily the date of the recorded speech.
+          const el = document.querySelector('meta[itemprop="dateCreated"]');
           return el ? new Date(el.content).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : '';
         })(),
       });
       renderSpeakerEditor();
+      sendSpeakerMap();
       break;
 
     case 'STOP_FACTCHECK':
