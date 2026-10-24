@@ -153,4 +153,4 @@ jobs:
         env:
           RESULTS: ${{ toJSON(needs) }}
         run: |
-          node -e 'const jobs=JSON.parse(process.env.RESULTS); for(const [name,job] of Object.entries(jobs)) { if(job.result!=="success") { console.error(`${name}: ${job.result}`); process.exitCode=1; } }'
+          node -e 'const jobs=JSON.parse(process.env.RESULTS); for(const [name,job] of Object.entries(jobs)) { if(job.result!=="success") { console.error(name+": "+job.result); process.exitCode=1; } }'
