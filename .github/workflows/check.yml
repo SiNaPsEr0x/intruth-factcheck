@@ -80,10 +80,12 @@ jobs:
       - run: npm test
       - run: npm run lint
       - if: runner.os == 'Windows'
-        shell: cmd
+        shell: pwsh
         env:
           INTRUTH_SETUP_UNATTENDED: '1'
-        run: call Install-InTruth.cmd
+        run: |
+          & .\Install-InTruth.cmd
+          if ($LASTEXITCODE -ne 0) { throw 'Windows bootstrap failed.' }
       - if: runner.os == 'macOS'
         run: sh Install-InTruth.command
       - run: node scripts/install-helper.cjs --uninstall
