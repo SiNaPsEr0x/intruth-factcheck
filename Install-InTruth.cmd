@@ -1,5 +1,6 @@
 @echo off
 setlocal
+set "INTRUTH_TEMP_DIR="
 set "INTRUTH_NODE_VERSION=24.22.1"
 set "INTRUTH_NODE_TARGET=win-x64"
 set "INTRUTH_NODE_SHA=d2046d28c2c3dcd211ac5145c0bf30e2047ef9dfb306693c8c6e2eccd8b95fa5"

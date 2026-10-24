@@ -2,6 +2,18 @@
 // The account-only app-server connection owns OAuth. No tokens cross this module.
 const { spawn } = require('node:child_process');
 const os = require('node:os');
+function stopAuthProcess(child) {
+  if (!child) return;
+  child.stdin.destroy(); child.stdout.destroy();
+  if (child.pid) {
+    if (process.platform === 'win32') {
+      const killer = spawn('taskkill.exe', ['/PID', String(child.pid), '/T', '/F'], { shell: false, detached: process.platform !== 'win32', windowsHide: true, stdio: 'ignore' });
+      killer.on('error', () => child.kill('SIGKILL'));
+    } else {
+      try { process.kill(-child.pid, 'SIGKILL'); } catch { child.kill('SIGKILL'); }
+    }
+  }
+}
 function loginUrl(value) {
   const url = new URL(value);
   if (url.protocol !== 'https:' || url.port || url.username || url.password ||
@@ -22,7 +34,7 @@ class AuthManager {
         'app-server', '--stdio', '-c', 'project_doc_max_bytes=0', '-c', 'model_provider="openai"',
         '-c', 'features.shell_tool=false', '-c', 'features.apps=false', '-c', 'features.plugins=false',
         '-c', 'features.hooks=false', '-c', 'features.multi_agent=false', '-c', 'features.browser_use=false'],
-      { shell: false, windowsHide: true, stdio: ['pipe', 'pipe', 'ignore'], env: process.env, cwd: os.tmpdir() });
+      { shell: false, detached: process.platform !== 'win32', windowsHide: true, stdio: ['pipe', 'pipe', 'ignore'], env: process.env, cwd: os.tmpdir() });
       let buffer = '';
       const fail = () => {
         if (this.child !== child) return;
@@ -35,8 +47,9 @@ class AuthManager {
       child.stdin.on('error', fail);
       child.stdout.setEncoding('utf8');
       child.stdout.on('data', data => {
+        if (this.child !== child) return;
         buffer += data;
-        if (Buffer.byteLength(buffer) > 1024 * 1024) { child.kill(); fail(); return; }
+        if (Buffer.byteLength(buffer) > 1024 * 1024) { stopAuthProcess(child); fail(); return; }
         let end;
         while ((end = buffer.indexOf('\n')) !== -1) {
           const line = buffer.slice(0, end); buffer = buffer.slice(end + 1);
@@ -133,7 +146,7 @@ class AuthManager {
   dispose() {
     clearTimeout(this.loginTimer);
     const child = this.child; this.child = null; this.connection = null;
-    child?.stdin.destroy(); child?.kill();
+    stopAuthProcess(child);
     for (const { reject, timer } of this.pending.values()) { clearTimeout(timer); reject(new Error('Authentication service closed.')); }
     this.pending.clear();
   }
