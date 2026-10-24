@@ -1,0 +1,14 @@
+# Runtime checksums and POSIX launchers must survive Windows checkouts unchanged.
+* text=auto
+*.js text eol=lf
+*.cjs text eol=lf
+*.mjs text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.toml text eol=lf
+*.command text eol=lf
+*.cmd text eol=crlf
+*.wasm binary
+*.png binary

@@ -156,7 +156,7 @@ async function refreshBridgeWarning() {
     const state = health.auth?.state;
     authBtn.hidden = bridgeReady || !health.auth?.canLogin;
     authBtn.textContent = pt(state === 'pending' ? 'authReopen' : 'authRetry');
-    detail = state === 'pending' ? pt('authPending') : state === 'required' ? pt('authRequired') : health.auth?.error || health.error || '';
+    detail = state === 'pending' ? pt('authPending') : state === 'required' ? pt('authRequired') : state === 'error' ? pt('authFailed') : health.error || '';
     if (!automaticLoginRequested && ['required', 'pending'].includes(state)) {
       automaticLoginRequested = true;
       await requestSignIn();

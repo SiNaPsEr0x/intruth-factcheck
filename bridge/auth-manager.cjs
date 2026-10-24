@@ -19,7 +19,7 @@ class AuthManager {
     if (this.connection) return this.connection;
     this.connection = (async () => {
       const child = this.child = spawn(this.command.bin, [...this.command.prefix,
-        'app-server', '--stdio', '-c', 'project_doc_max_bytes=0',
+        'app-server', '--stdio', '-c', 'project_doc_max_bytes=0', '-c', 'model_provider="openai"',
         '-c', 'features.shell_tool=false', '-c', 'features.apps=false', '-c', 'features.plugins=false',
         '-c', 'features.hooks=false', '-c', 'features.multi_agent=false', '-c', 'features.browser_use=false'],
       { shell: false, windowsHide: true, stdio: ['pipe', 'pipe', 'ignore'], env: process.env, cwd: os.tmpdir() });

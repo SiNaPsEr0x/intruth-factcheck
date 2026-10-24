@@ -183,7 +183,7 @@ function createBridge({ runner, model = DEFAULT_MODEL, maxConcurrent = 2, allowe
     if (req.method === 'GET' && req.url === '/health') {
       const access = auth ? await auth.status() : undefined;
       return json(200, { ok: true, service: 'intruth-codex', protocol: 2, model, inflight: controllers.size,
-        ...readiness, ...(access && { ready: access.ready, auth: access }) });
+        ...(auth ? { cliVersion: readiness.cliVersion } : readiness), ...(access && { ready: access.ready, auth: access }) });
     }
     if (req.method === 'POST' && ['/v1/auth/login', '/v1/auth/cancel'].includes(req.url)) {
       if (!allowedOrigin || req.headers['x-intruth-client'] !== 'extension-v2') return json(403, { error: { message: 'Extension authorization required.' } });

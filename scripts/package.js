@@ -54,6 +54,7 @@ zip([...files(path.join(root, 'realtime-factcheck')), { file: path.join(root, 'L
 zip([...files(root, 'intruth-codex/'),
   { file: path.join(root, '.codex/config.toml'), name: 'intruth-codex/.codex/config.toml' },
   { file: path.join(root, '.gitignore'), name: 'intruth-codex/.gitignore' },
+  { file: path.join(root, '.gitattributes'), name: 'intruth-codex/.gitattributes' },
   { file: path.join(root, '.gitleaksignore'), name: 'intruth-codex/.gitleaksignore' },
   { file: path.join(root, '.gitleaks.toml'), name: 'intruth-codex/.gitleaks.toml' },
   { file: path.join(root, '.nvmrc'), name: 'intruth-codex/.nvmrc' },

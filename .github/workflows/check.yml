@@ -31,6 +31,7 @@ jobs:
       # Exact npm version is deliberately tested across supported Node majors.
       - run: npm install --global npm@12.2.1 # zizmor: ignore[adhoc-packages]
       - run: npm ci --ignore-scripts
+      - run: sh -n Install-InTruth.command
       - run: npm run versions
       - if: matrix.node == 26
         run: npm run vendor && git diff --exit-code -- realtime-factcheck/src/vendor realtime-factcheck/licenses
@@ -85,7 +86,9 @@ jobs:
         run: |
           $tokens = $null
           $errorsFound = $null
-          [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $PWD 'scripts/install-windows.ps1'), [ref]$tokens, [ref]$errorsFound) | Out-Null
+          $line = Get-Content Install-InTruth.cmd | Where-Object { $_.StartsWith('powershell.exe ') }
+          $script = $line.Substring($line.IndexOf('-Command "') + 10).TrimEnd('"')
+          [System.Management.Automation.Language.Parser]::ParseInput($script, [ref]$tokens, [ref]$errorsFound) | Out-Null
           if ($errorsFound.Count) { throw ($errorsFound | Out-String) }
   audit:
     runs-on: ubuntu-latest
