@@ -50,10 +50,15 @@ async function launchBrowser() {
     args: process.getuid?.() === 0 ? ['--no-sandbox'] : [],
   });
 }
-async function launchNativeExtension({ proxy = false, mockSignIn = false } = {}) {
+async function launchNativeExtension({ proxy = false, mockSignIn = false, nativeManifest } = {}) {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'intruth-native-'));
   let context;
   try {
+    if (nativeManifest) {
+      const hosts = path.join(directory, 'NativeMessagingHosts');
+      await fs.mkdir(hosts, { recursive: true });
+      await fs.copyFile(nativeManifest, path.join(hosts, 'com.intruth.codex.json'));
+    }
     context = await chromium.launchPersistentContext(directory, {
       headless: true, executablePath: process.env.CHROMIUM_BIN || chromium.executablePath(),
       ignoreDefaultArgs: ['--disable-extensions'], args: ['--enable-unsafe-extension-debugging'],

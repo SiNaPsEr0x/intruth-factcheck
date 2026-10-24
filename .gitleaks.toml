@@ -2,7 +2,10 @@
 [extend]
 useDefault = true
 
-[[allowlists]]
+[[rules]]
+id = "generic-api-key"
+
+[[rules.allowlists]]
 description = "Public SPKI key for the pinned Chrome extension ID"
 condition = "AND"
 paths = ['(^|/)realtime-factcheck/manifest\.json$']

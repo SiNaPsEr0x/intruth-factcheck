@@ -19,7 +19,7 @@ function audioContext() {
     mockTranscriber: transcriber,
   });
   const source = fs.readFileSync(path.join(__dirname, '../realtime-factcheck/src/offscreen/offscreen-ex.js'), 'utf8');
-  vm.runInContext(source.replace(/^import .*;\n/m, ''), context);
+  vm.runInContext(source.replace(/^import .*;\r?\n/m, ''), context);
   vm.runInContext(`active = true; language = 'en'; transcriber = mockTranscriber;
     audio = new Float32Array(MAX_SAMPLES); audioEndSample = MAX_SAMPLES;
     hasSpeechSinceCommit = true; lastVoiceTime = Date.now() - 3000;`, context);

@@ -57,6 +57,9 @@ test('auth endpoints require an allowed extension origin and expose no credentia
   assert.equal(calls, 0);
   const response = await fetch(base + '/v1/auth/login', { method: 'POST', headers: { Origin: 'chrome-extension://' + id, 'X-InTruth-Client': 'extension-v2' } });
   assert.equal(response.status, 200); assert.equal(calls, 1);
+  assert.equal((await fetch(base + '/v1/auth/login', { method: 'POST',
+    headers: { Origin: 'chrome-extension://' + id, 'X-InTruth-Client': 'extension-v2' }, body: '{}' })).status, 400);
+  assert.equal(calls, 1);
   assert.equal((await (await fetch(base + '/health')).json()).ready, false);
 });
 test('extension login coordination opens one tab and stores only the attempt ID', async () => {

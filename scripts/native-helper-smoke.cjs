@@ -18,11 +18,19 @@ const { extensionId } = require('../bridge/native-config.cjs');
   let native;
   try {
     await install({ directory, skipDependencies: true });
-    native = await launchNativeExtension({ mockSignIn: true });
+    native = await launchNativeExtension({ mockSignIn: true, nativeManifest: destinations().find(file => file.includes('google-chrome-for-testing')) });
     assert.equal(native.id, extensionId());
     const popup = await native.context.newPage();
     await popup.goto(`chrome-extension://${native.id}/src/popup/popup.html`);
-    await popup.waitForFunction(() => !document.querySelector('#toggleBtn').disabled, { timeout: 25000 });
+    try {
+      await popup.waitForFunction(() => !document.querySelector('#toggleBtn').disabled, null, { timeout: 25000 });
+    } catch (error) {
+      console.log(await popup.evaluate(async () => {
+        let native; try { native = await chrome.runtime.sendNativeMessage('com.intruth.codex', { type: 'START_BRIDGE' }); } catch (failure) { native = failure.message; }
+        return { warning: document.querySelector('#bridgeWarning').textContent, native };
+      }));
+      throw error;
+    }
     const health = await (await fetch('http://127.0.0.1:8787/health')).json();
     assert.equal(health.auth.state, 'ready');
     assert.equal(health.ready, true);
