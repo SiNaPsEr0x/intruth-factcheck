@@ -1,59 +1,130 @@
-# InTruth · Codex
+# InTruth
 
 **Italiano** · [English](#english)
 
-Fact-checking di video e dibattiti con **trascrizione Whisper nel browser** e
-**Codex CLI** per analisi e ricerca web. Questa versione usa **`gpt-6-luna`** con
-ragionamento **`low`** come impostazione iniziale. L’accesso è gestito da
-Codex e non richiede di incollare chiavi nel popup.
+InTruth ti aiuta a controllare le affermazioni che ascolti in un video o in un
+dibattito su YouTube e Jubilee. Trascrive l'audio con Whisper nel browser, poi
+usa Codex per analizzare il testo e cercare riscontri sul web. I risultati
+compaiono accanto al video, con i link alle fonti.
 
-Progetto originale di **Risha Panigrahi**:
-https://github.com/rpanigrahi222/intruth-factcheck.
-Adattamento del repository https://github.com/SiNaPsEr0x/intruth-factcheck.
-Vedi [LICENSE](LICENSE) e [NOTICE.md](NOTICE.md).
+La configurazione iniziale usa `gpt-6-luna` con ragionamento `low`. Per accedere
+si usa il login di Codex: nel popup non devi inserire chiavi API.
 
-## Installazione automatica
+## Installazione
 
-1. Scarica ed estrai lo [ZIP del progetto](https://github.com/SiNaPsEr0x/intruth-factcheck/archive/refs/heads/master.zip).
-2. **Una sola volta sul PC del browser**, esegui `Install-InTruth.cmd` su Windows
-   oppure `Install-InTruth.command` su macOS/Linux. L’installatore scarica Node
-   verificandone il checksum, installa il componente locale e lo registra nel
-   browser per l’utente corrente, senza privilegi amministrativi.
-3. In `chrome://extensions`, carica la cartella **`realtime-factcheck`** come
-   estensione non pacchettizzata, oppure ricaricala se già presente.
-4. Apri InTruth. Il browser avvia il componente locale. Se serve l’accesso,
-   si apre **la pagina ufficiale ChatGPT**: completa solo il login e l’eventuale
-   conferma. Il popup diventa pronto automaticamente, senza riavviare nulla.
+1. Scarica lo [ZIP del progetto](https://github.com/SiNaPsEr0x/intruth-factcheck/archive/refs/heads/master.zip)
+   ed estrailo.
+2. Sul computer in cui usi il browser, esegui `Install-InTruth.cmd` su Windows
+   oppure `Install-InTruth.command` su macOS o Linux. Basta farlo una volta:
+   installa il componente locale e configura l'avvio dal browser per il tuo
+   utente, senza privilegi amministrativi. Se serve, scarica Node e ne verifica
+   il checksum.
+3. Apri `chrome://extensions`, attiva **Modalità sviluppatore** e scegli
+   **Carica estensione non pacchettizzata**. Seleziona la cartella
+   `realtime-factcheck` dentro il progetto.
+4. Apri InTruth. Se hai già effettuato l'accesso a Codex, viene usata quella
+   sessione. Altrimenti si apre la pagina ufficiale ChatGPT: completa il login
+   e il popup sarà pronto.
 
-Se Codex ha già una sessione utilizzabile, viene riusata. La CLI gestisce
-memorizzazione e rinnovo dei token. Nessuna password/API key/token va incollata
-nel popup. Un accesso annullato mostra il pulsante per riprovare, senza aprire
-schede in continuazione. L’avvio automatico non avvia la cattura audio: il tasto
-**Avvia il Fact-Checking** resta necessario per il consenso di Chrome.
+Dopo questa prima installazione il componente locale parte da solo. Non devi
+lasciare aperto un terminale né avviare comandi a ogni utilizzo. L'installazione
+iniziale serve perché Chrome non permette a un'estensione di installare
+programmi sul computer. Il sistema operativo o le regole aziendali possono
+richiedere un'autorizzazione all'esecuzione.
 
-**L’installazione locale iniziale è necessaria:** un’estensione Chrome non può
-installare o eseguire programmi arbitrari al solo caricamento. Dopo questa
-installazione non servono terminali aperti o comandi `npm start`/`codex login`.
-Chrome, eventuali criteri aziendali e il sistema operativo possono richiedere
-la normale autorizzazione all’installazione/esecuzione.
+Se hai già Node, puoi installare il componente con `npm run setup`. Per
+rimuoverne la registrazione dal browser usa
+`node scripts/install-helper.cjs --uninstall`: i file locali e il login Codex
+restano sul computer.
 
-Il nuovo ID stabile è `ihohghmjebpjjlehnbdknchigighdlke`: aggiornando dalla vecchia
-versione non pacchettizzata può essere necessario rimuoverla e ricaricarla;
-le preferenze dell’estensione possono azzerarsi, mentre il login Codex resta.
-Se è ancora aperto un vecchio bridge 2.1 in un terminale, chiudilo una volta per
-liberare la porta 8787 prima del nuovo avvio automatico.
+### Se stai aggiornando
 
-Chi ha già Node può usare `npm run setup`. Per rimuovere soltanto la registrazione
-dell’avvio automatico: `node scripts/install-helper.cjs --uninstall`.
-I file locali e il login Codex non vengono cancellati.
+Ricarica l'estensione da `chrome://extensions`, poi ricarica anche la pagina del
+video. Dalla versione 2.2 l'ID è `ihohghmjebpjjlehnbdknchigighdlke`: passando da
+una vecchia installazione non pacchettizzata potresti doverla rimuovere e
+caricare di nuovo. Le preferenze possono azzerarsi; il login Codex rimane.
 
-## Avvio manuale / sviluppo
+Se avevi avviato a mano il bridge 2.1, chiudi quel terminale per liberare la porta
+8787. Le installazioni successive useranno l'avvio automatico.
 
-Versione **2.2.0**, con software aggiornato ai canali **stabili** verificati il
-23 ottobre 2026. Usa **Node.js 26.12.1** (ultima stabile), oppure **24.22.1 LTS**,
-**npm 12.2.1** e Chrome/Chromium stabile aggiornato. Codex CLI **0.164.0** viene
-installato dal lockfile del progetto. Il bridge deve essere avviato **sullo
-stesso computer del browser**, anche se sviluppi il progetto con Codex nel cloud.
+## Come si usa
+
+Apri un video su YouTube o Jubilee e poi il popup di InTruth. Scegli il modello
+Whisper (`tiny`, `base` o `small`) e la lingua dell'audio; con `auto` viene
+rilevata automaticamente. I risultati seguono la lingua del browser, in italiano
+o inglese.
+
+Se conosci la data in cui è stato registrato il discorso, inseriscila. Può fare
+la differenza quando si controllano affermazioni legate a un preciso momento
+storico. La data di caricamento del video non viene usata al suo posto.
+
+Quando il collegamento è pronto, premi **Avvia il Fact-Checking**. Questo clic
+serve anche a dare a Chrome il consenso per catturare l'audio della scheda.
+Al primo utilizzo Whisper deve scaricare i modelli da Hugging Face: attendi il
+download prima di iniziare. Il popup mostra la cache e permette di svuotarla.
+
+L'overlay si può trascinare e ridimensionare. Con **Esporta** scarichi un report
+HTML con i risultati e le fonti; puoi aprirlo nel browser e scegliere
+Stampa → Salva come PDF. Le verifiche ancora in attesa non vengono incluse.
+
+### Come leggere i risultati
+
+La prima risposta è provvisoria. Dopo la ricerca sul web, il giudizio può
+cambiare in entrambe le direzioni. Se la ricerca fallisce o non trova fonti
+utilizzabili, l'affermazione resta **NON VERIFICABILE**, con confidenza bassa.
+Controlla comunque i link: una fonte citata può essere poco pertinente e anche
+la trascrizione può contenere errori.
+
+InTruth analizza due segmenti di trascrizione per volta. Se ne rimane uno solo,
+lo elabora dopo 10 secondi senza altri segmenti finali. Un segmento Whisper può
+durare fino a circa 30 secondi, a cui si aggiungono i tempi di elaborazione.
+Se le verifiche restano indietro, metti in pausa il video. Fermando la sessione
+si annullano anche le richieste in corso e in coda.
+
+I nomi dei partecipanti si possono correggere a mano: InTruth non riconosce le
+voci e usa `Unknown` quando il testo non chiarisce chi sta parlando.
+L'indicatore di “convinzione” riguarda le parole usate, soprattutto in inglese;
+non dice se una persona sta dicendo la verità.
+
+## Modello e accesso a Codex
+
+Il modello predefinito è `gpt-6-luna`. Deve essere disponibile per il tuo account:
+se non lo è, puoi inserire nel popup l'ID esatto di un altro modello a cui hai
+accesso. InTruth non passa automaticamente a un modello diverso. `low` è il
+livello di ragionamento impostato nel bridge.
+
+Per controllare il collegamento dal terminale:
+
+```sh
+npm run check       # Controlla la CLI e il login salvato, senza chiamare il modello
+npm run verify      # Prova una richiesta al modello: usa la quota del tuo account
+npm run verify:web  # Prova anche la ricerca web, dopo verify
+```
+
+Un login salvato può essere scaduto: `verify` permette di verificare l'accesso
+effettivo. Se serve, accedi di nuovo dal popup oppure esegui
+`npm exec -- codex login` sul computer del browser. Restano validi i limiti di
+utilizzo e di frequenza del tuo account Codex.
+
+## Privacy
+
+Whisper elabora l'audio nel browser. Il testo della trascrizione, il titolo,
+la data e le affermazioni da controllare vengono invece inviati a OpenAI
+tramite Codex. La ricerca web usa i servizi di ricerca di Codex. A questi dati
+si applicano le condizioni e le impostazioni privacy del servizio e del tuo
+account.
+
+Codex gestisce le credenziali; l'estensione non salva chiavi API nel browser.
+I modelli audio rimangono nella cache locale. Il bridge elimina i propri file
+temporanei e non conserva trascrizioni o sessioni in un archivio proprio;
+questo non riguarda l'eventuale conservazione dei dati da parte del servizio.
+
+## Avvio manuale e sviluppo
+
+Il progetto è alla versione 2.2.0. Le versioni di riferimento sono Node.js
+26.12.1 oppure 24.22.1 LTS, npm 12.2.1 e Codex CLI 0.164.0. La CLI viene
+installata con le altre dipendenze dal lockfile. Per i dettagli sui componenti
+browser e sulle loro versioni, vedi [SOFTWARE.md](docs/SOFTWARE.md).
 
 ```sh
 git clone https://github.com/SiNaPsEr0x/intruth-factcheck.git
@@ -66,284 +137,170 @@ npm run verify
 npm start
 ```
 
-Se hai scaricato lo ZIP, estrailo e parti da `npm ci`
-nella cartella con `package.json`. Lascia aperto il terminale del bridge.
-`npm ci` installa le versioni bloccate di CLI e strumenti di sviluppo; i file
-browser già pronti sono inclusi. Non serve ricompilarli per usare l'estensione.
+Se hai scaricato lo ZIP, parti da `npm ci` nella cartella con `package.json`.
+Il bridge deve girare sullo stesso computer del browser, anche se lavori al
+codice in un ambiente cloud. Con l'avvio manuale, lascia aperto il terminale.
+I file dell'estensione sono già pronti: non serve ricompilarli per usarla.
 
-1. Apri `chrome://extensions` e abilita **Modalità sviluppatore**.
-2. Scegli **Carica estensione non pacchettizzata** e seleziona la cartella
-   **`realtime-factcheck`**, non la radice del repository.
-3. Apri o ricarica una pagina video di **YouTube** o **Jubilee**.
-4. Apri il popup InTruth: il modello iniziale è `gpt-6-luna`.
-5. Scegli Whisper `tiny`, `base` o `small`, la lingua e, se nota, la vera data di
-   registrazione del discorso. `auto` rileva la lingua; i risultati seguono la
-   lingua del browser (italiano/inglese).
-6. Quando il bridge risulta collegato, premi **Avvia il Fact-Checking**.
+[AGENTS.md](AGENTS.md) contiene le istruzioni per lavorare al progetto con Codex.
+La configurazione in `.codex/config.toml` imposta il modello e il ragionamento
+negli ambienti che supportano le impostazioni di progetto.
 
-Al primo utilizzo Whisper scarica i pesi da Hugging Face; il popup mostra la cache
-e permette di svuotarla. WebGPU è preferibile; è previsto un fallback CPU/WASM.
-Le trascrizioni automatiche possono contenere errori: controlla il testo originale.
+### Configurazione del bridge
 
-### Il modello richiesto
-
-`gpt-6-luna` è l'identificatore scelto per questa configurazione, **non una garanzia
-che ogni account Codex vi abbia accesso**. Il progetto non inventa alias come
-`luna-light-latest` e non cambia modello in silenzio. Puoi inserire nel popup un
-altro identificatore esatto disponibile per il tuo account.
-
-`low` è il livello di ragionamento configurato nel bridge; non è un modello
-separato chiamato “Light”. Non sono garantite risposte istantanee o tempi fissi.
-
-```sh
-npm run check   # Controlla versione CLI e stato login; non interroga il modello
-npm run verify  # Invia una piccola richiesta REALE al modello, consumando quota
-npm run verify:web  # Prova anche la ricerca web nativa; eseguila dopo verify
-```
-
-L'avvio del bridge esegue solo il controllo locale. Un login memorizzato può
-comunque essere scaduto: `verify` controlla anche l'accesso effettivo. Se compare
-un errore di token/login, esegui `npm exec -- codex login` nel tuo terminale e riavvia il bridge.
-Se il modello non è disponibile, scegli un ID autorizzato per il tuo account.
-
-## Come funziona
-
-```text
-Audio della scheda → AudioWorklet → Whisper locale → trascrizione
-  → bridge HTTP su 127.0.0.1:8787 → codex exec (gpt-6-luna, low)
-  → prima analisi senza web → verifica con web_search live → overlay e report
-```
-
-- L'estensione valuta due segmenti finali per volta; un segmento isolato viene
-  elaborato dopo 10 secondi senza un altro segmento finale. Un segmento Whisper
-  può durare fino a circa 30 secondi, oltre al tempo d'inferenza.
-- La prima card è **provvisoria**. La verifica successiva può correggerla in
-  entrambe le direzioni, anche da VERO a FALSO.
-- Senza ricerca eseguita, senza fonti utilizzabili o in caso di errore, la card
-  resta **NON VERIFICABILE**, con confidenza bassa. Una fonte citata può comunque
-  essere errata o irrilevante: consulta i link e valuta l'evidenza.
-- Sono ammessi al massimo tre claim per passata, due richieste CLI contemporanee
-  e una coda limitata. Se Codex resta indietro, metti in pausa il video.
-- Fermare la sessione annulla le richieste. Le risposte vecchie non passano alla
-  scheda della sessione successiva.
-- I nomi dei partecipanti sono contesto modificabile, non diarizzazione audio.
-  Il modello deve usare `Unknown` quando il testo non identifica chi parla.
-- La “convinzione” lessicale descrive il linguaggio e **non misura la verità**;
-  le liste lessicali sono soprattutto inglesi.
-- L'overlay è ridimensionabile e trascinabile. **Esporta** scarica un report HTML
-  autonomo con modello e fonti; aprilo e usa Stampa → Salva come PDF.
-  Le card ancora in attesa non entrano nel report finché non sono finalizzate.
-
-La data di caricamento del video non viene usata come data del discorso.
-Inserisci la data di registrazione per verificare affermazioni storiche nel
-contesto corretto; in sua assenza il modello non può ricostruirla con certezza.
-
-## Configurazione del bridge
-
-| Variabile | Default | Significato |
+| Variabile | Valore predefinito | Uso |
 | --- | --- | --- |
-| `CODEX_BIN` | CLI locale del progetto, poi `codex` nel PATH | Eseguibile Codex o percorso a `bin/codex.js`; override esplicito |
-| `CODEX_MODEL` | `gpt-6-luna` | Modello predefinito per bridge/check/verify; il popup invia il suo ID selezionato |
-| `CODEX_REASONING_EFFORT` | `low` | Livello supportato dal modello scelto |
-| `REQ_TIMEOUT` | `120000` | Timeout della CLI in millisecondi |
-| `MAX_CONCURRENT` | `2` | Limite processi CLI paralleli |
-| `INTRUTH_EXTENSION_ID` | vuoto | Facoltativo: autorizza solo l'ID della propria estensione |
-| `BRIDGE_PORT` | `8787` | Porta del server; per l'estensione usa 8787, oppure modifica anche `BRIDGE_URL` in `src/shared/protocol.js` e ricaricala |
+| `CODEX_BIN` | CLI del progetto, poi `codex` nel PATH | Percorso dell'eseguibile o di `bin/codex.js` |
+| `CODEX_MODEL` | `gpt-6-luna` | Modello per bridge, check e verify; il popup invia quello selezionato |
+| `CODEX_REASONING_EFFORT` | `low` | Livello di ragionamento supportato dal modello |
+| `REQ_TIMEOUT` | `120000` | Tempo massimo della CLI, in millisecondi |
+| `MAX_CONCURRENT` | `2` | Numero massimo di processi CLI contemporanei |
+| `INTRUTH_EXTENSION_ID` | vuoto | Limita l'accesso all'ID indicato |
+| `BRIDGE_PORT` | `8787` | Porta del bridge |
 
-Il client annulla ogni fetch dopo 125 secondi: aumentare solo `REQ_TIMEOUT`
-oltre tale limite non allunga l'attesa dell'estensione. `CODEX_BIN` su Windows
-può indicare `codex.exe` o il launcher `@openai/codex/bin/codex.js`; lo shim npm
-standard viene risolto senza passare il prompt a una shell.
+L'estensione usa la porta 8787. Per cambiarla devi aggiornare anche `BRIDGE_URL`
+in `realtime-factcheck/src/shared/protocol.js` e ricaricare l'estensione. Il
+client interrompe le richieste dopo 125 secondi: aumentare solo `REQ_TIMEOUT`
+non prolunga quel limite.
 
-Il bridge ascolta solo su `127.0.0.1`, controlla Host/Origin, limita dimensioni e
-concorrenza e usa un protocollo InTruth dedicato. La CLI usa sessioni effimere in
-cartelle temporanee, sandbox in sola lettura e shell/app/plugin/hook disabilitati.
-Le configurazioni utente non vengono caricate; l'autenticazione resta gestita da
-Codex. `bridge/warm-bridge.js` è solo un alias compatibile del nuovo avvio.
+Su Windows, `CODEX_BIN` può indicare `codex.exe` o il launcher
+`@openai/codex/bin/codex.js`. Lo shim npm viene risolto senza passare il prompt
+a una shell.
 
-## Privacy
+Il bridge ascolta su `127.0.0.1`, controlla Host e Origin e limita dimensioni e
+concorrenza delle richieste. Per l'analisi avvia sessioni Codex temporanee, in
+sola lettura, con shell, app, plugin e hook disabilitati e senza caricare le
+configurazioni utente. L'autenticazione rimane gestita da Codex.
+`bridge/warm-bridge.js` è un alias dell'avvio attuale.
 
-L'audio viene elaborato localmente da Whisper. **Il testo della trascrizione, il
-titolo, la data e i claim vengono inviati a OpenAI tramite Codex** per l'analisi;
-la ricerca web coinvolge i servizi di ricerca usati da Codex. Un bridge locale
-non rende locale il modello linguistico. Si applicano condizioni, limiti e
-impostazioni privacy dell'account e del servizio Codex utilizzato.
-
-Nessuna API key viene salvata nel browser: l’autenticazione resta gestita da
-Codex. I modelli audio restano nella cache dell’estensione. Il bridge non
-conserva transcript o sessioni su file propri e cancella i suoi file temporanei;
-questo non implica assenza di conservazione lato servizio.
-
-## Versioni stabili e controlli
-
-| Componente | Versione |
-| --- | --- |
-| Node.js / npm | 26.12.1 / 12.2.1 |
-| Codex CLI | 0.164.0 |
-| Transformers.js | 4.3.1 |
-| ONNX Runtime Web/Common | 1.30.0 |
-| esbuild / Playwright | 0.28.2 / 1.64.1 |
-| Chrome stabile usato nei test | 156.0.8078.47 |
-
-Il bundle browser è ricostruito contro **ONNX stabile 1.30.0**: il bundle
-universale upstream di Transformers.js include invece una dipendenza ONNX di
-sviluppo. Non viene distribuita quella versione dev. JavaScript e WASM sono
-aggiornati insieme, con checksum e licenze. Dettagli e fonti delle versioni:
-[SOFTWARE.md](docs/SOFTWARE.md).
-
-Verifiche eseguite su questa versione:
-
-- **30 test automatici**: protocollo, processi, errori, code, audio e isolamento
-  delle sessioni; Codex è simulato in questi test.
-- **Interfaccia e MV3 nativa**: popup, storage, permessi di origine del bridge,
-  content script, worker, card e stop. Il modello è simulato.
-- **Whisper reale nell'estensione**: audio pubblico di riferimento riconosciuto
-  correttamente su CPU/WASM, sotto la CSP dell'estensione.
-- **Traduzione reale inglese → italiano**: «La Terra orbita intorno al Sole.»
-- Controlli di sintassi, checksum, versioni stabili, archivio ZIP e `npm audit`.
-
-Il 24 ottobre sono passate anche le prove **reali di Codex/Luna** e della
-**ricerca web nativa** (`npm run verify` e `npm run verify:web`). Il precedente
-blocco di autenticazione non si è ripresentato nella sessione attuale. Sul tuo PC
-verifica comunque il tuo login e l'accesso al modello con gli stessi comandi.
-La cattura dell'audio della tua scheda tramite gesto dell'utente e WebGPU sulla
-tua GPU richiedono una prova locale. Vedi [risultati](docs/VALIDATION.md).
-
-## Sviluppo con Codex
-
-Apri la cartella in Codex. [AGENTS.md](AGENTS.md) contiene le istruzioni del
-progetto e `.codex/config.toml` seleziona Luna/low per gli ambienti che supportano
-la configurazione di progetto.
+### Test e pacchetti
 
 ```sh
 npm ci --ignore-scripts
-npm run versions
-npm outdated
 npm test
 npm run lint
+npm run versions
 npm exec -- playwright install chromium
 npm run test:browser
 npm run test:native
+npm run test:setup
 npm run test:whisper
 npm run package
 ```
 
-I test browser ora usano Playwright **JavaScript bloccato nel lockfile**: non
-servono Python o un Playwright Python installato separatamente. Le prove UI/MV3
-usano la porta 8787 libera e una CLI simulata. `test:whisper` scarica un campione
-pubblico e i modelli, fa inferenza reale, e non chiama Codex.
-`CHROMIUM_BIN` permette di scegliere un browser stabile installato.
+I test browser usano Playwright JavaScript dal lockfile e richiedono la porta
+8787 libera. Puoi scegliere un browser già installato con `CHROMIUM_BIN`.
+`test:whisper` scarica un campione audio e i modelli per provare trascrizione e
+traduzione reali, senza chiamare Codex. Whisper usa WebGPU quando disponibile,
+con CPU/WASM come alternativa.
 
-Per ricostruire i bundle dopo un aggiornamento approvato usa `npm run vendor`;
-non modificare a mano i file minificati. `npm run package` produce
-`dist/intruth-codex-extension.zip` (da estrarre prima di caricarlo in Chrome) e
-`dist/intruth-codex-source.zip` (progetto completo con lockfile e configurazione).
-La CI controlla Node 22/24/26, riproducibilità dei bundle e UI/MV3 nel browser.
+Per aggiornare i bundle usa `npm run vendor`, senza modificare a mano i file
+minificati. JavaScript, WASM, checksum, licenze e SBOM vanno aggiornati insieme.
+Il bundle distribuito usa ONNX stabile al posto della dipendenza di sviluppo
+inclusa nel bundle universale upstream di Transformers.js.
 
-Dettagli: [architettura](docs/ARCHITECTURE.md), [migrazione](docs/MIGRATION.md),
-[software](docs/SOFTWARE.md), [validazione](docs/VALIDATION.md).
+`npm run package` crea due archivi in `dist`:
 
-## Sicurezza e correzioni automatiche
+- `intruth-codex-extension.zip`: estensione da estrarre e caricare in Chrome.
+- `intruth-codex-source.zip`: progetto completo, con lockfile e configurazione.
 
-A ogni PR, push su `master`, avvio manuale e ogni notte, GitHub Actions esegue:
+La suite comprende 30 test automatici, prove dell'interfaccia e dell'estensione
+MV3, oltre a trascrizione Whisper e traduzione inglese–italiano. Nei test della
+pipeline Codex viene simulato; le prove reali del modello e della ricerca web
+si eseguono con i comandi `verify`. La cattura della scheda e WebGPU vanno
+provate anche sul computer e sulla GPU che userai.
+I risultati delle verifiche sono in [VALIDATION.md](docs/VALIDATION.md).
 
-- **OSV-Scanner** sul lockfile e sullo SBOM di Transformers/ONNX distribuiti.
-- **npm audit** anche sulle dipendenze di sviluppo, senza soglia minima esclusa.
-- **CodeQL security-extended** su JavaScript e GitHub Actions; i risultati SARIF
-  sono caricati in Security e i finding bloccano il gate anche se già presenti.
-- **Gitleaks** sull'intera cronologia Git, con valori oscurati; **actionlint** e
-  **zizmor** sui workflow e sulla configurazione Dependabot.
-- Test Node 22/24/26, browser/MV3, checksum, ricostruzione dei bundle e ZIP.
+## Controlli di sicurezza
 
-**Dependabot** propone aggiornamenti npm e delle Actions. La manutenzione
-quotidiana applica anche `npm audit fix --package-lock-only --ignore-scripts`
-creando una PR dedicata, senza `--force`. Una scansione fallita su `master`
-attiva un tentativo di riparazione del lockfile. Se non esiste una correzione
-compatibile, la vulnerabilità rimane visibile e il gate rimane rosso.
+GitHub Actions esegue i controlli a ogni PR, a ogni push su `master` e ogni notte.
+Puoi avviarli anche manualmente. La pipeline include OSV-Scanner sul lockfile e
+sullo SBOM dei runtime distribuiti, `npm audit`, CodeQL per JavaScript e Actions,
+Gitleaks sull'intera cronologia, actionlint e zizmor. Controlla anche i test su
+Node 22, 24 e 26, gli installer Windows e macOS, il browser, i bundle e gli ZIP.
 
-Il merge automatico accetta soltanto commit firmati dei bot previsti, modifiche
-limitate a dipendenze o SHA delle stesse Actions, aggiornamenti compatibili e
-**tutti** i controlli superati sul commit esatto e su una branch aggiornata.
-Aggiornamenti major, minor pre-1.0, cambi a script/codice e revisioni bloccanti
-richiedono revisione. I runtime vendorizzati che richiedono un rebuild coordinato
-restano bloccati finché bundle, checksum e SBOM non sono aggiornati insieme.
+Dependabot propone gli aggiornamenti delle dipendenze e delle Actions. La
+manutenzione quotidiana prova a correggere il lockfile con
+`npm audit fix --package-lock-only --ignore-scripts`, senza `--force`, e apre
+una PR quando trova una modifica. Anche una scansione fallita su `master`
+attiva questo tentativo. Se non c'è una correzione compatibile, il problema
+resta segnalato e i controlli rimangono bloccati.
 
-Non serve una chiave esterna per gli scanner. GitHub deve consentire alle
-Actions di creare PR; la funzione di manutenzione segnala un errore se questa
-impostazione è disattivata. Dettagli, limiti e controlli del 24 ottobre:
+Il merge automatico è limitato agli aggiornamenti compatibili delle dipendenze
+o degli SHA delle stesse Actions, con commit firmati dei bot previsti e tutti
+i controlli passati sul commit da integrare. Il branch deve essere aggiornato
+e non devono esserci revisioni bloccanti. Le major, le minor prima della 1.0 e
+le modifiche al codice o agli script richiedono revisione; per i runtime
+vendorizzati serve anche la ricostruzione dei bundle.
+
+Gli scanner non richiedono chiavi esterne. GitHub deve però consentire alle
+Actions di creare PR. La configurazione e i limiti sono descritti in
 [SECURITY.md](SECURITY.md).
 
-## Problemi comuni
+## Se qualcosa non funziona
 
-- **Bridge non raggiungibile:** esegui `npm start` sul PC del browser. Un server
-  avviato nel cloud o in un container senza inoltro porta non è il tuo localhost.
-- **Token scaduto o modello non disponibile:** esegui `npm exec -- codex login`, poi
-  `npm run verify`. Il bridge non effettua fallback su un altro modello.
-- **Estensione aggiornata ma pagina non risponde:** ricarica l'estensione in
-  `chrome://extensions` e la pagina video. Non funziona su pagine interne Chrome.
-- **Modello audio lento:** prova `tiny`, controlla WebGPU e attendi il download.
-- **Verifica in coda:** pausa il video. Abbonamento e rate limit Codex continuano
-  ad applicarsi; non esiste una quota illimitata garantita dal bridge.
+- **Il bridge non risponde:** se hai usato l'installatore, controlla di averlo
+  eseguito sul computer del browser e prova a riaprire InTruth. Con l'avvio
+  manuale, verifica che `npm start` sia ancora in esecuzione. Un bridge avviato
+  nel cloud non è raggiungibile sul localhost del tuo PC.
+- **Il login è scaduto o il modello non è disponibile:** ripeti l'accesso e prova
+  `npm run verify`. Controlla che l'ID scelto sia disponibile per il tuo account.
+- **Dopo un aggiornamento la pagina non risponde:** ricarica sia l'estensione
+  sia la pagina del video. Le pagine interne di Chrome non sono supportate.
+- **La trascrizione è lenta:** prova Whisper `tiny` e controlla che il download
+  sia terminato. Le prestazioni dipendono anche dalla disponibilità di WebGPU.
+- **Le verifiche si accumulano:** metti in pausa il video e lascia finire le
+  richieste in corso.
 
-I risultati sono assistenza informativa e richiedono controllo delle fonti.
+Altri dettagli: [architettura](docs/ARCHITECTURE.md),
+[migrazione](docs/MIGRATION.md), [software](docs/SOFTWARE.md) e
+[validazione](docs/VALIDATION.md).
+
+## Crediti e licenza
+
+Il progetto originale è di [Risha Panigrahi](https://github.com/rpanigrahi222/intruth-factcheck).
+Questo repository ne adatta il funzionamento a Codex e aggiunge la gestione del
+componente locale. Sono mantenuti la [licenza originale non commerciale](LICENSE)
+e i riferimenti in [NOTICE.md](NOTICE.md).
 
 ## English
 
-Version 2.2 adds automatic local startup and official ChatGPT browser sign-in.
-Run `Install-InTruth.cmd` (Windows) or `Install-InTruth.command` (macOS/Linux)
-once, then load/reload the `realtime-factcheck` extension. No terminal or pasted
-key/token is needed for subsequent use. A usable Codex login is reused; otherwise
-the official sign-in page opens and the popup becomes ready after completion.
-Chrome requires this one-time local helper installation; the extension alone
-cannot install arbitrary executables. Corporate/OS policies still apply.
-The stable extension ID may reset preferences when upgrading older unpacked builds.
-Close an old manually started 2.1 bridge once to release port 8787.
+InTruth checks claims in YouTube and Jubilee videos. Whisper transcribes the
+audio in your browser; Codex analyses the text and searches the web. Results
+appear beside the video with links to their sources.
 
+To install, download and extract the [project ZIP](https://github.com/SiNaPsEr0x/intruth-factcheck/archive/refs/heads/master.zip).
+Run `Install-InTruth.cmd` on Windows or `Install-InTruth.command` on macOS/Linux
+once, on the computer where you use the browser. In `chrome://extensions`,
+enable Developer mode and load the `realtime-factcheck` folder as an unpacked
+extension. Open InTruth and complete the official ChatGPT sign-in if needed.
+The local helper starts automatically after installation. You do not need to
+paste an API key or keep a terminal open.
 
-InTruth combines local Whisper transcription with **Codex CLI** analysis and
-native live web search. Its configured default is **`gpt-6-luna`**, reasoning
-**`low`**. Account access to that exact model must be verified; no invented
-“light/latest” aliases or silent model fallbacks are used.
+Open a supported video, choose the Whisper model and audio language, and add
+the recording date if you know it. Press **Start Fact-Checking** to allow audio
+capture. The first use requires a model download from Hugging Face. Export
+saves an HTML report that you can print to PDF.
 
-Version 2.2.0 uses stable releases checked on 2026-10-23: Node 26.12.1
-(or 24.22.1 LTS), npm 12.2.1, Codex CLI 0.164.0, Transformers.js 4.3.1,
-stable ONNX Runtime 1.30.0, esbuild 0.28.2 and Playwright 1.64.1.
-The browser bundle is rebuilt to avoid upstream's development ORT dependency.
-See [software versions](docs/SOFTWARE.md).
+The default model is `gpt-6-luna` with `low` reasoning. It must be available to
+your Codex account; you can enter another exact model ID in the popup. Your
+account's usage limits apply. To check access manually, run `npm run check`,
+then `npm run verify`; `npm run verify:web` also tests web search. The last two
+commands make real requests and use your account's quota.
 
-Clone the default branch, run `npm ci`,
-`npm exec -- codex login`, `npm run check`, `npm run verify`, then `npm start`.
-Keep the bridge running **on the browser's computer**. In `chrome://extensions`,
-enable Developer mode and load `realtime-factcheck` unpacked. Reload a supported
-YouTube/Jubilee tab, select language/Whisper size and optional recording date,
-and start. The popup does not request an API key.
+Initial results are provisional and may change after web research. Missing or
+failed searches leave a claim unverified. Check the transcript and source links
+yourself. Speaker names come from the text, not voice recognition, and the
+lexical conviction indicator is not a measure of truthfulness.
 
-`npm run verify` sends a small real inference request. `check` only verifies CLI
-version and locally stored login status, which may still have expired. If login
-fails, log in again locally. If the model is unavailable, enter an authorized
-model ID in the popup. Usage and rate limits of your Codex account still apply.
+Audio is processed locally, but transcript text and context are sent to OpenAI
+through Codex. Codex manages sign-in and credentials. See the service's privacy
+settings and account terms for how those requests are handled.
 
-Preliminary answers are explicitly pending. Web evidence may change any verdict
-in either direction; failed searches or missing usable sources result in
-UNVERIFIABLE/LOW. Speaker names are inferred from explicit context, not audio
-diarization. Lexical conviction is not a truthfulness score. Export downloads a
-self-contained HTML report that can be printed to PDF.
+For development, use `npm ci`, `npm test` and `npm run lint`. Browser tests use
+Playwright; install Chromium with `npm exec -- playwright install chromium`.
+See [software versions](docs/SOFTWARE.md), [validation results](docs/VALIDATION.md)
+and [security policy](SECURITY.md) for more detail.
 
-Audio stays in the browser, but **transcript text and context are sent to OpenAI
-through Codex**. The local bridge does not make LLM inference local. Model
-weights are downloaded from Hugging Face and cached. Codex manages sign-in
-and credential storage.
-
-Development checks: `npm test`, `npm run lint`, `npm run versions`,
-`npm outdated`, `npm run test:browser`, `npm run test:native`,
-`npm run test:whisper`, `npm audit`, `npm run package`.
-Install the browser first with `npm exec -- playwright install chromium`.
-Native extension registration, real Whisper transcription and English/Italian
-translation passed on stable Chrome 156.0.8078.47; the native pipeline's Codex
-responses were simulated. Real Codex inference and native web-search probes
-also passed on 2026-10-24 with the current login. Real tabCapture/user-gesture
-behavior and hardware WebGPU still need local testing. See [validation](docs/VALIDATION.md).
-
-Original author: **Risha Panigrahi**,
-https://github.com/rpanigrahi222/intruth-factcheck.
-The original custom noncommercial [LICENSE](LICENSE) is preserved.
+Based on [Risha Panigrahi's original project](https://github.com/rpanigrahi222/intruth-factcheck),
+under the original noncommercial [LICENSE](LICENSE).
