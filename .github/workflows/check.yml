@@ -79,7 +79,13 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npm test
       - run: npm run lint
-      - run: npm run setup
+      - if: runner.os == 'Windows'
+        shell: cmd
+        env:
+          INTRUTH_SETUP_UNATTENDED: '1'
+        run: call Install-InTruth.cmd
+      - if: runner.os == 'macOS'
+        run: sh Install-InTruth.command
       - run: node scripts/install-helper.cjs --uninstall
       - if: runner.os == 'Windows'
         shell: pwsh

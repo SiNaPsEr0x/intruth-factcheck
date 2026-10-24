@@ -29,10 +29,10 @@ set "PATH=%INTRUTH_NODE_DIR%;%PATH%"
 "%INTRUTH_NODE_DIR%\node.exe" "%~dp0scripts\install-helper.cjs"
 if errorlevel 1 goto failed
 echo Setup complete. Load/reload realtime-factcheck in Chrome and open InTruth.
-pause
+if not defined INTRUTH_SETUP_UNATTENDED pause
 exit /b 0
 :failed
 echo Installation failed. No security policy was changed.
 if defined INTRUTH_TEMP_DIR if exist "%INTRUTH_TEMP_DIR%" rmdir /s /q "%INTRUTH_TEMP_DIR%"
-pause
+if not defined INTRUTH_SETUP_UNATTENDED pause
 exit /b 1
