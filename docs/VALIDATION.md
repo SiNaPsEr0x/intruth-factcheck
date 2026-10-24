@@ -61,3 +61,25 @@ local checks above used the latest stable Chrome patch through `CHROMIUM_BIN`.
 
 Original version 2.0.0's tests and credential failure were retained as historical
 context in the PR; this record describes the updated 2.1.0 files and checks.
+
+## Security automation update — 2026-10-24
+
+- **23 tests passed** locally on Node 24.22.1: the original 17 plus claim-field
+  isolation and five security/merge-policy regression tests.
+- Lint, stable-version checks, the vendor rebuild (no artifact/checksum changes),
+  both portable ZIPs and their security-configuration contents passed.
+- `npm audit`: **0 known vulnerabilities**; OSV-Scanner 2.7.0 scanned 54 lockfile
+  packages and three vendor-SBOM entries with **0 known vulnerabilities**.
+- Gitleaks 8.30.1 scanned all 25 existing commits. The two historic tokenizer
+  false positives are narrowly identified in `.gitleaksignore`; no other secret
+  findings remained. actionlint 1.7.12 and offline zizmor 1.31.1 passed.
+- GitHub Actions also passed Node 22/24/26 tests and browser/UI plus native MV3
+  smoke checks. Local Chrome execution in this session was blocked by the host's
+  socket restrictions; browser results come from the hosted GitHub runner.
+- Full GitHub security-gate results are linked from PR #7. The first run caught
+  a ShellCheck warning in the new aggregate gate; the expression was corrected
+  and the entire pipeline was rerun.
+
+No live Codex inference, hardware WebGPU or Windows/macOS validation was added by
+this update. The earlier account/model-access limitation above still applies.
+See SECURITY.md for scan scope, automation prerequisites and integration policy.
