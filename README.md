@@ -7,6 +7,10 @@ dibattito su YouTube e Jubilee. Trascrive l'audio con Whisper nel browser, poi
 usa Codex per analizzare il testo e cercare riscontri sul web. I risultati
 compaiono accanto al video, con i link alle fonti.
 
+<p align="center">
+  <img src="realtime-factcheck/assets/intruth-readme-banner.svg" alt="InTruth: il video viene trascritto localmente con Whisper, verificato con Codex e ricerca web, e mostrato con verdetti e fonti accanto al video" width="100%">
+</p>
+
 La configurazione iniziale usa `gpt-6-luna` con ragionamento `low`. Per accedere
 si usa il login di Codex: nel popup non devi inserire chiavi API.
 
