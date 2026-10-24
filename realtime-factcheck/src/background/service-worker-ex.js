@@ -1,5 +1,6 @@
 // Codex CLI is the only inference provider. Audio stays in the browser.
 importScripts('../shared/protocol.js');
+importScripts('../shared/connection.js');
 const { DEFAULT_MODEL, BRIDGE_URL, modelId, cleanSources, validateClaims } = InTruthProtocol;
 let TRANSCRIPT_LANGUAGE = 'auto';
 let WHISPER_MODEL = 'base';
@@ -441,10 +442,26 @@ chrome.runtime.onConnect.addListener(() => console.log('[service-worker] woken b
 chrome.runtime.onStartup.addListener(() => {
   isCapturing = false;
   activeTabId = null;
+  connectCodexAutomatically();
 });
+chrome.runtime.onInstalled?.addListener(() => connectCodexAutomatically());
+
+async function connectCodexAutomatically() {
+  try {
+    const health = await InTruthConnection.health();
+    if (health.auth?.state === 'required' || health.auth?.state === 'pending') await InTruthConnection.openSignIn();
+  } catch { /* The popup explains first-time helper installation or connection errors. */ }
+}
  
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   switch (msg.type) {
+    case 'AUTH_CODEX':
+      if (sender.id !== chrome.runtime.id || sender.url !== chrome.runtime.getURL('src/popup/popup.html')) {
+        sendResponse({ ok: false, error: 'Only the InTruth popup can start sign-in.' }); return;
+      }
+      InTruthConnection.openSignIn(msg.retry === true)
+        .then(result => sendResponse({ ok: true, ...result }), () => sendResponse({ ok: false, error: 'Unable to start Codex sign-in.' }));
+      return true;
  
     case 'START_FACTCHECK':
       startFactCheck()
@@ -549,10 +566,9 @@ async function startFactCheck() {
   const startId = ++sessionId;
   try {
     await loadSettings();
-    const response = await fetch(BRIDGE_URL + '/health', { signal: AbortSignal.timeout(2500) });
-    const health = await response.json();
-    if (!response.ok || health.service !== 'intruth-codex' || health.protocol !== 2 || !health.ready) {
-      throw new Error(health.error || 'Codex bridge is not ready. Run codex login, then npm start.');
+    const health = await InTruthConnection.health();
+    if (!health.ready) {
+      throw new Error('Codex sign-in required. Open the InTruth popup.');
     }
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (!tab?.id) throw new Error('No active tab found.');

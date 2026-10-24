@@ -34,6 +34,8 @@ function zip(entries, target) {
     local.writeUInt32LE(compressed.length, 18); local.writeUInt32LE(data.length, 22);
     local.writeUInt16LE(filename.length, 26);
     directory.writeUInt32LE(0x02014b50, 0); directory.writeUInt16LE(20, 4); directory.writeUInt16LE(20, 6);
+    directory.writeUInt16LE((3 << 8) | 20, 4); // UNIX creator: preserve executable installer bits.
+    directory.writeUInt32LE(((0o100000 | (fs.statSync(file).mode & 0o777)) << 16) >>> 0, 38);
     local.copy(directory, 8, 6, 30);
     directory.writeUInt32LE(offset, 42);
     central.push(directory, filename);
@@ -52,7 +54,9 @@ zip([...files(path.join(root, 'realtime-factcheck')), { file: path.join(root, 'L
 zip([...files(root, 'intruth-codex/'),
   { file: path.join(root, '.codex/config.toml'), name: 'intruth-codex/.codex/config.toml' },
   { file: path.join(root, '.gitignore'), name: 'intruth-codex/.gitignore' },
+  { file: path.join(root, '.gitattributes'), name: 'intruth-codex/.gitattributes' },
   { file: path.join(root, '.gitleaksignore'), name: 'intruth-codex/.gitleaksignore' },
+  { file: path.join(root, '.gitleaks.toml'), name: 'intruth-codex/.gitleaks.toml' },
   { file: path.join(root, '.nvmrc'), name: 'intruth-codex/.nvmrc' },
   { file: path.join(root, '.node-version'), name: 'intruth-codex/.node-version' },
   { file: path.join(root, '.npmrc'), name: 'intruth-codex/.npmrc' },

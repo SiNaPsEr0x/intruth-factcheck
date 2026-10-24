@@ -1,0 +1,13 @@
+# This is a public Chrome extension identity, never an OAuth credential.
+[extend]
+useDefault = true
+
+[[rules]]
+id = "generic-api-key"
+
+[[rules.allowlists]]
+description = "Public SPKI key for the pinned Chrome extension ID"
+condition = "AND"
+paths = ['(^|/)realtime-factcheck/manifest\.json$']
+regexTarget = "secret"
+regexes = ['^MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAiv8FDILRyuqHx60GzqRHW3Fc19AJLMqljEVbpDmQCZ2GnjU9nEQP0DxmUhYzYf9mNH32jTReDGAWo40q\+nty6r5mavM8/UtSdJkSh7YQxCtImbvAcX0onvyfL7dkZQ6Yha6EnC74SW\+cBrNHT\+\+rWuB1i41Hmyk6ybAiCXHLn79/I64OYrCSwp3CE2c2xbXG9xz4XaSeX\+HY75e0t2AX9V\+xsTvqZwLLaorUlMWVmj3W6SNnnsd3aVhkzfXm/mumtDb3WLqBHdq8fWY16P5D8oBtUHp1CU95hVbsEVQF26MLsz0rrwStT0LpCQ22X9LjFYnZhp5yhr1qlvp4n0oonwIDAQAB$']

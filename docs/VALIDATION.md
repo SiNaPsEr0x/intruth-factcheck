@@ -92,3 +92,31 @@ current results supersede the earlier session's expired-login limitation;
 other installations must still verify their own account. Hardware WebGPU,
 full real-tab audio capture and Windows/macOS validation remain outstanding.
 See SECURITY.md for scan scope, automation prerequisites and integration policy.
+
+
+## Automatic setup/sign-in — 2.2.0, 2026-10-24
+
+The local suite now contains **30 passing tests**, including managed OAuth
+readiness, a shared login attempt, cancellation, credential-free extension state,
+official URL validation and rejection of unauthorized/credential-body requests.
+A real account-only app-server probe reused the current Codex login successfully;
+no real account was logged out and no fresh interactive login was forced.
+
+The hosted Chrome smoke uses the actual installed Native Messaging launcher and
+loopback bridge. It starts without `npm start`, simulates a missing Codex login,
+opens exactly one intercepted official-page URL and automatically enables the
+popup after a simulated login-completed event. UI/native MV3 checks also pass.
+These tests establish integration behavior, not a real interactive OAuth exchange.
+
+The CI matrix also runs tests, lint and real user-level helper registration and
+removal on macOS and Windows. Line endings are pinned with `.gitattributes` so
+vendor checksums and POSIX launchers survive Windows checkouts. The Windows
+bootstrap's actual PowerShell command is parsed by PowerShell; POSIX bootstrap
+syntax and executable source-ZIP attributes are checked. Download digests are
+pinned to the official Node 24.22.1 release checksum list.
+
+The exact public extension key exception was tested by inserting a synthetic
+secret in the same manifest: that additional finding remains detectable. No
+real credential is allowlisted. npm audit/OSV reported no known dependency
+vulnerabilities. Complete platform/browser/security results: PR #8 and its checks.
+Hardware audio capture/WebGPU still require the user's local environment.

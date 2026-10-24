@@ -1,6 +1,6 @@
 {
   "name": "intruth-codex",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "private": true,
   "description": "On-device transcription and evidence-based fact-checking with Codex CLI",
   "engines": {
@@ -21,7 +21,9 @@
     "lint": "node scripts/check.js",
     "package": "node scripts/package.js",
     "security:sbom": "node scripts/security/vendor-sbom.cjs",
-    "security:audit": "npm audit --audit-level=low && node scripts/security/vendor-sbom.cjs --check"
+    "security:audit": "npm audit --audit-level=low && node scripts/security/vendor-sbom.cjs --check",
+    "setup": "node scripts/install-helper.cjs",
+    "test:setup": "node scripts/native-helper-smoke.cjs"
   },
   "license": "SEE LICENSE IN LICENSE",
   "devDependencies": {

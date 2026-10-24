@@ -1,6 +1,7 @@
 'use strict';
 const fs = require('node:fs');
 const args = process.argv.slice(2);
+if (args.includes('app-server')) { process.argv[2] = process.env.INTRUTH_AUTH_FIXTURE_MODE || 'existing'; require('./auth-server.cjs'); return; }
 if (args[0] === '--version') { console.log('codex-cli 0.164.0'); process.exit(0); }
 if (args[0] === 'login') { console.log('Logged in (test fixture)'); process.exit(0); }
 let prompt = '';

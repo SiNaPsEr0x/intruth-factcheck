@@ -94,3 +94,32 @@ not its upstream development dependency. `npm run vendor` verifies upstream
 integrity and records artifact checksums. See SOFTWARE.md. Native MV3 and real
 ASR/translation browser checks are available through `test:native` and
 `test:whisper`. They do not prove real Codex model access.
+
+
+## Automatic setup and sign-in (2.2)
+
+Chrome Native Messaging starts `com.intruth.codex`, whose only accepted command
+is `START_BRIDGE`. Its installed manifest and launcher both pin the extension's
+stable public-key ID. A detached, user-level loopback bridge is started only if
+needed. Native messaging never accepts paths, executable names, credentials or
+inference instructions. Manual bridge usage remains compatible.
+
+The bridge uses an account-only `codex app-server --stdio` connection for
+`initialize`/`initialized`, `account/read`, managed `account/login/start` and
+cancellation/completion. App-server auth uses Codex's credential configuration;
+its working directory is temporary and shell/apps/plugins/hooks are disabled.
+No thread/turn or generic RPC proxy is exposed. Inference still uses the isolated
+`codex exec` path documented above. Only official HTTPS authentication hosts are
+accepted. Credentials, account email and refresh tokens never reach the extension.
+
+On installation/browser startup and when opening the popup, the helper is woken.
+A missing login opens one official page per attempt through the service worker.
+Only the attempt ID is kept in session storage. Failed/cancelled flows need an
+explicit retry. Account completion updates health automatically; no restart is
+needed. Starting audio capture still requires the user's extension action.
+
+Initial setup downloads a pinned Node 24.22.1 archive and verifies a pinned
+SHA-256 before executing it. It copies the bridge and installs the repository's
+locked dependencies without lifecycle scripts in a user-owned application folder,
+then registers user-level manifests (or Windows HKCU keys). No system policy,
+administrator privilege, shell profile or external browser login cache is modified.

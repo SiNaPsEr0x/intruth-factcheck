@@ -156,7 +156,7 @@ async function checkCli(command) {
   return match[0];
 }
 
-function createBridge({ runner, model = DEFAULT_MODEL, maxConcurrent = 2, allowedExtensionId = '', readiness = {} }) {
+function createBridge({ runner, model = DEFAULT_MODEL, maxConcurrent = 2, allowedExtensionId = '', readiness = {}, auth }) {
   const controllers = new Set();
   const server = http.createServer(async (req, res) => {
     const json = (status, data) => {
@@ -179,14 +179,30 @@ function createBridge({ runner, model = DEFAULT_MODEL, maxConcurrent = 2, allowe
       res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-InTruth-Client');
     }
     if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
+    if (req.method === 'GET' && req.url === '/ping') return json(200, { service: 'intruth-codex', protocol: 2 });
     if (req.method === 'GET' && req.url === '/health') {
-      return json(200, { ok: true, service: 'intruth-codex', protocol: 2, model, inflight: controllers.size, ...readiness });
+      const access = auth ? await auth.status() : undefined;
+      return json(200, { ok: true, service: 'intruth-codex', protocol: 2, model, inflight: controllers.size,
+        ...(auth ? { cliVersion: readiness.cliVersion } : readiness), ...(access && { ready: access.ready, auth: access }) });
+    }
+    if (req.method === 'POST' && ['/v1/auth/login', '/v1/auth/cancel'].includes(req.url)) {
+      if (!allowedOrigin || req.headers['x-intruth-client'] !== 'extension-v2') return json(403, { error: { message: 'Extension authorization required.' } });
+      if (req.headers['transfer-encoding'] || Number(req.headers['content-length'] || 0) !== 0) return json(400, { error: { message: 'Sign-in does not accept credentials or request bodies.' } });
+      if (!auth) return json(501, { error: { message: 'Update the InTruth helper to enable automatic sign-in.' } });
+      try { return json(200, req.url.endsWith('/cancel') ? await auth.cancel() : await auth.login()); }
+      catch { return json(502, { error: { message: 'Unable to start Codex sign-in. Retry.' } }); }
+    }
+    if (req.method === 'POST' && req.url === '/v1/helper/stop') {
+      if (!allowedOrigin || req.headers['x-intruth-client'] !== 'extension-v2') return json(403, { error: { message: 'Extension authorization required.' } });
+      json(200, { ok: true });
+      setImmediate(() => { server.cancelAll(); server.close(); server.closeAllConnections(); });
+      return;
     }
     if (req.method !== 'POST' || req.url !== '/v1/factcheck') return json(404, { error: { message: 'Not found.' } });
     if (req.headers['x-intruth-client'] !== 'extension-v2' || !/^application\/json(?:;|$)/i.test(req.headers['content-type'] || '')) {
       return json(415, { error: { message: 'Expected an InTruth JSON request.' } });
     }
-    if (!readiness.ready) return json(503, { error: { message: readiness.error || 'Codex is not ready. Run codex login, then restart the bridge.' } });
+    if (!(auth ? (await auth.status()).ready : readiness.ready)) return json(503, { error: { message: 'Codex sign-in required. Open the InTruth popup.' } });
     if (controllers.size >= maxConcurrent) return json(429, { error: { message: 'Codex is busy. Try again shortly.' } });
     const controller = new AbortController();
     controllers.add(controller);
@@ -210,6 +226,7 @@ function createBridge({ runner, model = DEFAULT_MODEL, maxConcurrent = 2, allowe
       catch (error) { return json(400, { error: { message: error.message } }); }
       json(200, await runner(payload, controller.signal));
     } catch (error) {
+      if (auth && /401|unauthorized|not authenticated|token.*expired|login required/i.test(error.message)) auth.invalidate();
       json(502, { error: { message: error.message } });
     } finally {
       controllers.delete(controller);
@@ -217,7 +234,7 @@ function createBridge({ runner, model = DEFAULT_MODEL, maxConcurrent = 2, allowe
   });
   server.requestTimeout = 15000;
   server.headersTimeout = 10000;
-  server.on('close', () => { for (const controller of controllers) controller.abort(); });
+  server.on('close', () => { for (const controller of controllers) controller.abort(); auth?.dispose(); });
   server.cancelAll = () => { for (const controller of controllers) controller.abort(); };
   return server;
 }
@@ -250,7 +267,9 @@ async function main() {
   }
   const port = positiveInt(process.env.BRIDGE_PORT, 8787, 'BRIDGE_PORT');
   if (port > 65535) throw new Error('BRIDGE_PORT must be <= 65535.');
-  const server = createBridge({ runner, model, readiness,
+  const { AuthManager } = require('./auth-manager.cjs');
+  const auth = new AuthManager(command);
+  const server = createBridge({ runner, model, readiness, auth,
     maxConcurrent: positiveInt(process.env.MAX_CONCURRENT, 2, 'MAX_CONCURRENT'),
     allowedExtensionId: process.env.INTRUTH_EXTENSION_ID || '' });
   server.on('error', error => { console.error(error.message); process.exitCode = 1; });

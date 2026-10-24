@@ -105,3 +105,22 @@ login on 2026-10-24. Real user-gesture audio capture, hardware WebGPU, Windows a
 macOS remain separate runtime checks. CI's Codex responses are simulated; each
 installation still needs to verify its own account/model access. Model-generated verdicts, sources, transcripts and downloaded model weights
 still require appropriate human review.
+
+
+## Automatic sign-in boundary (2.2)
+
+The Native Messaging host authorizes only the stable extension ID and launches
+only the bundled bridge. Its JSON frame parser has explicit size/time limits.
+User-level installers verify pinned official Node archive digests before use and
+install npm dependencies with the existing lockfile and lifecycle scripts disabled.
+Windows uses current-user registry keys; macOS/Linux use current-user native-host
+manifests. Registration removal preserves Codex credentials and installed files.
+
+Managed ChatGPT OAuth runs in Codex app-server, not in an embedded login form.
+Only `auth.openai.com` and `chatgpt.com` HTTPS login URLs are opened. The bridge
+exposes parameterless sign-in/cancel endpoints and rejects credential bodies;
+these endpoints and helper stop require an allowed extension Origin and client
+header. Account read responses are reduced to readiness flags; neither email nor
+tokens are returned. The extension stores only an attempt ID in session storage.
+Authentication subprocesses receive no model prompts and cannot request approval
+or execute tools through this integration. Inference isolation is unchanged.
