@@ -21,7 +21,7 @@ if errorlevel 1 goto failed
 set "INTRUTH_NODE_ARCHIVE=%INTRUTH_TEMP_DIR%\node.zip"
 curl.exe --fail --show-error --location --proto =https --tlsv1.2 --retry 3 "https://nodejs.org/dist/v%INTRUTH_NODE_VERSION%/node-v%INTRUTH_NODE_VERSION%-%INTRUTH_NODE_TARGET%.zip" -o "%INTRUTH_NODE_ARCHIVE%"
 if errorlevel 1 goto failed
-powershell.exe -NoProfile -Command "$ErrorActionPreference='Stop'; if ((Get-FileHash -LiteralPath $env:INTRUTH_NODE_ARCHIVE -Algorithm SHA256).Hash -ine $env:INTRUTH_NODE_SHA) { throw 'Node.js checksum mismatch. Installation stopped.' }; New-Item -ItemType Directory -Force -Path $env:INTRUTH_RUNTIME_PARENT | Out-Null; Expand-Archive -LiteralPath $env:INTRUTH_NODE_ARCHIVE -DestinationPath $env:INTRUTH_RUNTIME_PARENT -Force"
+powershell.exe -NoProfile -Command "$ErrorActionPreference='Stop'; $stream=[IO.File]::OpenRead($env:INTRUTH_NODE_ARCHIVE); $hash=[Security.Cryptography.SHA256]::Create(); try { $actual=[BitConverter]::ToString($hash.ComputeHash($stream)).Replace('-','').ToLowerInvariant() } finally { $stream.Dispose(); $hash.Dispose() }; if ($actual -ne $env:INTRUTH_NODE_SHA) { throw 'Node.js checksum mismatch. Installation stopped.' }; [void][Reflection.Assembly]::LoadFrom([IO.Path]::Combine([Runtime.InteropServices.RuntimeEnvironment]::GetRuntimeDirectory(),'System.IO.Compression.FileSystem.dll')); $stage=[IO.Path]::Combine($env:INTRUTH_TEMP_DIR,'unpack'); [IO.Compression.ZipFile]::ExtractToDirectory($env:INTRUTH_NODE_ARCHIVE,$stage); [void][IO.Directory]::CreateDirectory($env:INTRUTH_RUNTIME_PARENT); $source=[IO.Path]::Combine($stage,('node-v'+$env:INTRUTH_NODE_VERSION+'-'+$env:INTRUTH_NODE_TARGET)); [IO.Directory]::Move($source,$env:INTRUTH_NODE_DIR)"
 if errorlevel 1 goto failed
 rmdir /s /q "%INTRUTH_TEMP_DIR%"
 :install
