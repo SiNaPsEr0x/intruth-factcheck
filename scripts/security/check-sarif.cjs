@@ -19,7 +19,15 @@ if (require.main === module) {
   const files = fs.readdirSync(directory).filter(file => file.endsWith('.sarif'));
   if (!files.length) throw new Error('No SARIF files were produced.');
   let total = 0;
-  for (const file of files) total += securityFindings(JSON.parse(fs.readFileSync(path.join(directory, file), 'utf8'))).length;
+  for (const file of files) {
+    const findings = securityFindings(JSON.parse(fs.readFileSync(path.join(directory, file), 'utf8')));
+    total += findings.length;
+    for (const result of findings) {
+      const location = result.locations?.[0]?.physicalLocation;
+      console.log(JSON.stringify({ rule: result.ruleId, file: location?.artifactLocation?.uri,
+        line: location?.region?.startLine, message: result.message?.text }));
+    }
+  }
   console.log(`CodeQL security findings: ${total}`);
   if (total) process.exitCode = 1;
 }
