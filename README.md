@@ -4,8 +4,8 @@
 
 Fact-checking di video e dibattiti con **trascrizione Whisper nel browser** e
 **Codex CLI** per analisi e ricerca web. Questa versione usa **`gpt-6-luna`** con
-ragionamento **`low`** come impostazione iniziale. Non usa le API
-Anthropic e non richiede di incollare chiavi nel popup.
+ragionamento **`low`** come impostazione iniziale. L’accesso è gestito da
+Codex e non richiede di incollare chiavi nel popup.
 
 Progetto originale di **Risha Panigrahi**:
 https://github.com/rpanigrahi222/intruth-factcheck.
@@ -169,9 +169,8 @@ la ricerca web coinvolge i servizi di ricerca usati da Codex. Un bridge locale
 non rende locale il modello linguistico. Si applicano condizioni, limiti e
 impostazioni privacy dell'account e del servizio Codex utilizzato.
 
-Nessuna API key viene salvata nel browser. All'aggiornamento vengono rimosse le
-vecchie impostazioni della chiave Anthropic e i modelli Claude vengono migrati a
-`gpt-6-luna`. I modelli audio restano nella cache dell'estensione. Il bridge non
+Nessuna API key viene salvata nel browser: l’autenticazione resta gestita da
+Codex. I modelli audio restano nella cache dell’estensione. Il bridge non
 conserva transcript o sessioni su file propri e cancella i suoi file temporanei;
 questo non implica assenza di conservazione lato servizio.
 
@@ -332,8 +331,8 @@ self-contained HTML report that can be printed to PDF.
 
 Audio stays in the browser, but **transcript text and context are sent to OpenAI
 through Codex**. The local bridge does not make LLM inference local. Model
-weights are downloaded from Hugging Face and cached. Codex owns authentication;
-old Anthropic keys are removed from extension storage during migration.
+weights are downloaded from Hugging Face and cached. Codex manages sign-in
+and credential storage.
 
 Development checks: `npm test`, `npm run lint`, `npm run versions`,
 `npm outdated`, `npm run test:browser`, `npm run test:native`,

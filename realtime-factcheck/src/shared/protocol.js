@@ -5,14 +5,21 @@
   const BRIDGE_URL = 'http://127.0.0.1:8787';
   const VERDICTS = ['TRUE', 'SUBSTANTIALLY TRUE', 'FALSE', 'MISLEADING', 'UNVERIFIABLE'];
   const CONFIDENCE = ['HIGH', 'MEDIUM', 'LOW'];
-  const LEGACY_MODELS = /^(haiku|sonnet|opus|claude.*)$/i;
   function modelId(value) {
     if (value === undefined || value === null || value === '') return DEFAULT_MODEL;
-    if (typeof value === 'string' && LEGACY_MODELS.test(value)) return DEFAULT_MODEL;
     if (typeof value !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,99}$/.test(value)) {
       throw new Error('Invalid Codex model identifier.');
     }
     return value;
+  }
+  const PREFERENCE_KEYS = new Set(['whisperModel', 'transcriptLanguage', 'selectedModel', 'recordingDate',
+    'rtfcPanelWidth', 'rtfcFloating', 'rtfcLeft', 'rtfcTop', 'rtfcHeight']);
+  async function readSettings(storage) {
+    // Persist only supported preferences; authentication belongs to Codex.
+    const values = await storage.get(null);
+    const unused = Object.keys(values).filter(key => !PREFERENCE_KEYS.has(key));
+    if (unused.length) await storage.remove(unused);
+    return Object.fromEntries(Object.entries(values).filter(([key]) => PREFERENCE_KEYS.has(key)));
   }
   function cleanSources(sources) {
     if (!Array.isArray(sources)) return [];
@@ -48,7 +55,7 @@
         speaker_confidence_explanation: claim.speaker_confidence_explanation };
     });
   }
-  const api = { DEFAULT_MODEL, BRIDGE_URL, VERDICTS, CONFIDENCE, modelId, cleanSources, validateClaims };
+  const api = { DEFAULT_MODEL, BRIDGE_URL, VERDICTS, CONFIDENCE, modelId, readSettings, cleanSources, validateClaims };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.InTruthProtocol = api;
 })(globalThis);

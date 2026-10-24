@@ -10,7 +10,7 @@ const claim = { claim: 'Example factual claim.', verdict: 'TRUE', confidence: 'H
 const nextTurn = () => new Promise(resolve => setImmediate(resolve));
 
 function worker(fetch) {
-  const messages = [], stored = { selectedModel: 'haiku', anthropicKey: 'obsolete-test-value' };
+  const messages = [], stored = { retiredSetting: 'unused-value', rtfcPanelWidth: 420 };
   const event = () => ({ addListener() {} });
   const chrome = {
     storage: { local: {
@@ -84,12 +84,13 @@ test('late results from a stopped session cannot reach a new tab', async () => {
   assert.equal(messages.filter(message => message.type === 'UPDATE_VERDICTS').length, 0);
 });
 
-test('settings migration removes the former provider key and preserves Whisper preferences', async () => {
+test('settings retain supported preferences and discard unused fields', async () => {
   const { context, stored } = worker();
   stored.whisperModel = 'small';
   await vm.runInContext('loadSettings()', context);
   assert.equal(stored.selectedModel, 'gpt-6-luna');
-  assert.equal(stored.anthropicKey, undefined);
+  assert.equal(stored.retiredSetting, undefined);
+  assert.equal(stored.rtfcPanelWidth, 420);
   assert.equal(vm.runInContext('WHISPER_MODEL', context), 'small');
 });
 

@@ -1,7 +1,7 @@
 // Codex CLI is the only inference provider. Audio stays in the browser.
 importScripts('../shared/protocol.js');
 importScripts('../shared/connection.js');
-const { DEFAULT_MODEL, BRIDGE_URL, modelId, cleanSources, validateClaims } = InTruthProtocol;
+const { DEFAULT_MODEL, BRIDGE_URL, readSettings, modelId, cleanSources, validateClaims } = InTruthProtocol;
 let TRANSCRIPT_LANGUAGE = 'auto';
 let WHISPER_MODEL = 'base';
 let SELECTED_MODEL = DEFAULT_MODEL;
@@ -13,13 +13,12 @@ function resolvedLanguage() {
 }
 
 async function loadSettings() {
-  const data = await chrome.storage.local.get(['whisperModel', 'transcriptLanguage', 'selectedModel', 'recordingDate']);
+  const data = await readSettings(chrome.storage.local);
   WHISPER_MODEL = ['tiny', 'base', 'small'].includes(data.whisperModel) ? data.whisperModel : 'base';
   TRANSCRIPT_LANGUAGE = data.transcriptLanguage || 'auto';
   SELECTED_MODEL = modelId(data.selectedModel);
   RECORDING_DATE = /^\d{4}-\d{2}-\d{2}$/.test(data.recordingDate || '') ? data.recordingDate : '';
   await chrome.storage.local.set({ selectedModel: SELECTED_MODEL });
-  await chrome.storage.local.remove(['anthropicKey', 'useBridge', 'bridgeUrl']);
 }
 
 const EVALUATE_PROMPT = `You are a real-time fact-checker analyzing a live transcript segment.

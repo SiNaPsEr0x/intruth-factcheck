@@ -1,4 +1,4 @@
-const { DEFAULT_MODEL, BRIDGE_URL, modelId } = InTruthProtocol;
+const { DEFAULT_MODEL, BRIDGE_URL, readSettings, modelId } = InTruthProtocol;
 // popup.js
 
 const toggleBtn   = document.getElementById('toggleBtn');
@@ -106,12 +106,11 @@ let settingsReady = false;
 let starting = false;
 
 async function initializeSettings() {
-  const data = await chrome.storage.local.get(['whisperModel', 'transcriptLanguage', 'selectedModel', 'recordingDate']);
+  const data = await readSettings(chrome.storage.local);
   whisperEl.value = data.whisperModel || 'base';
   languageEl.value = data.transcriptLanguage || 'auto';
   recordingDateEl.value = data.recordingDate || '';
   try { modelEl.value = modelId(data.selectedModel); } catch { modelEl.value = DEFAULT_MODEL; }
-  await chrome.storage.local.remove(['anthropicKey', 'useBridge', 'bridgeUrl']);
   updateFlag();
   settingsReady = true;
   updateHint();
