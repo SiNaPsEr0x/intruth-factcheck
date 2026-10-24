@@ -1,23 +1,35 @@
 name: Check InTruth Codex
 on:
   push:
+    branches: [master]
   pull_request:
+  merge_group:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 3 * * *'
 permissions:
   contents: read
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 jobs:
   check:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     strategy:
+      fail-fast: false
       matrix:
         node: [22, 24, 26]
     steps:
-      - uses: actions/checkout@v7.0.1
-      - uses: actions/setup-node@v7.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ matrix.node }}
           check-latest: true
-          cache: npm
-      - run: npm install --global npm@12.2.1
+      # Exact npm version is deliberately tested across supported Node majors.
+      - run: npm install --global npm@12.2.1 # zizmor: ignore[adhoc-packages]
       - run: npm ci --ignore-scripts
       - run: npm run versions
       - if: matrix.node == 26
@@ -25,21 +37,127 @@ jobs:
       - run: npm test
       - run: npm run lint
       - run: npm run package
-      - uses: actions/upload-artifact@v7.0.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: intruth-codex-node-${{ matrix.node }}
           path: dist/*.zip
+          retention-days: 7
+          if-no-files-found: error
   browser:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v7.0.1
-      - uses: actions/setup-node@v7.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 26
           check-latest: true
-          cache: npm
-      - run: npm install --global npm@12.2.1
+      # Exact npm version is deliberately tested across supported Node majors.
+      - run: npm install --global npm@12.2.1 # zizmor: ignore[adhoc-packages]
       - run: npm ci --ignore-scripts
       - run: npm exec -- playwright install --with-deps chromium
       - run: npm run test:browser
       - run: npm run test:native
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - run: npm audit --audit-level=low
+      - run: node scripts/security/vendor-sbom.cjs --check
+  osv:
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
+    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@b1d267aea5211fa648d9d442fa64b90dbdcbdd36 # v2.7.0
+    with:
+      scan-args: |-
+        --lockfile=package-lock.json
+        --lockfile=security/vendor.cdx.json
+      fail-on-vuln: true
+  codeql:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [javascript-typescript, actions]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: none
+          queries: security-extended
+          config-file: .github/codeql/config.yml
+      - uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4
+        with:
+          category: /language:${{ matrix.language }}
+          output: codeql-results
+      - name: Fail on CodeQL security findings, including existing ones
+        run: node scripts/security/check-sarif.cjs codeql-results
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: codeql-${{ matrix.language }}
+          path: codeql-results/*.sarif
+          retention-days: 7
+          if-no-files-found: error
+  secrets:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Install checksum-verified Gitleaks
+        run: |
+          curl --fail --silent --show-error --location --retry 3 -o "$RUNNER_TEMP/gitleaks.tar.gz" https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
+          echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  $RUNNER_TEMP/gitleaks.tar.gz" | sha256sum --check
+          tar -xzf "$RUNNER_TEMP/gitleaks.tar.gz" -C "$RUNNER_TEMP" gitleaks
+      - name: Scan full Git history, redact all detected values
+        run: '"$RUNNER_TEMP/gitleaks" git --redact --no-banner --log-opts="--all" .'
+  workflow-security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install checksum-verified actionlint
+        run: |
+          curl --fail --silent --show-error --location --retry 3 -o "$RUNNER_TEMP/actionlint.tar.gz" https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz
+          echo "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8  $RUNNER_TEMP/actionlint.tar.gz" | sha256sum --check
+          tar -xzf "$RUNNER_TEMP/actionlint.tar.gz" -C "$RUNNER_TEMP" actionlint
+      - run: '"$RUNNER_TEMP/actionlint" -color'
+      - uses: zizmorcore/zizmor-action@53290badfa369cb0bf7ad16342cb62c2fa47ac7b # v0.8.0
+        with:
+          version: v1.31.1
+          advanced-security: false
+          online-audits: false
+  security-gate:
+    name: Security gate
+    if: always()
+    needs: [check, browser, audit, osv, codeql, secrets, workflow-security]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require every check to succeed
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          node -e 'const jobs=JSON.parse(process.env.RESULTS); for(const [name,job] of Object.entries(jobs)) { if(job.result!=="success") { console.error(name+": "+job.result); process.exitCode=1; } }'

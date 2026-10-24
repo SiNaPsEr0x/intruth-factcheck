@@ -105,6 +105,18 @@ function runProcess(command, args, { input = '', cwd, signal, timeout = 120000 }
   });
 }
 
+async function readLimitedOutput(file, limit = MAX_OUTPUT) {
+  const chunks = [];
+  let size = 0;
+  // Limit the bytes actually read, rather than checking a pathname before reading it.
+  for await (const chunk of fs.createReadStream(file, { highWaterMark: 64 * 1024 })) {
+    size += chunk.length;
+    if (size > limit) throw new Error('Codex response limit exceeded.');
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks).toString('utf8');
+}
+
 function createRunner({ command = resolveCommand(), model = DEFAULT_MODEL, effort = 'low', timeout = 120000 } = {}) {
   if (!['minimal', 'low', 'medium', 'high', 'xhigh'].includes(effort)) throw new Error('Invalid CODEX_REASONING_EFFORT.');
   model = modelId(model);
@@ -126,9 +138,7 @@ function createRunner({ command = resolveCommand(), model = DEFAULT_MODEL, effor
       const events = stdout.split('\n').flatMap(line => { try { return [JSON.parse(line)]; } catch { return []; } });
       const searched = events.some(event => event.type === 'item.completed' && event.item?.type === 'web_search');
       if (payload.webSearch && !searched) throw new Error('Codex did not perform web search; this claim remains unverified.');
-      const stat = await fsp.stat(output);
-      if (stat.size > MAX_OUTPUT) throw new Error('Codex response limit exceeded.');
-      const claims = validateClaims(JSON.parse(await fsp.readFile(output, 'utf8')));
+      const claims = validateClaims(JSON.parse(await readLimitedOutput(output)));
       return { claims, model: modelId(payload.model || model), searched };
     } finally {
       await fsp.rm(directory, { recursive: true, force: true });
@@ -255,5 +265,5 @@ async function main() {
   });
 }
 
-module.exports = { createRunner, createBridge, resolveCommand, runProcess, checkCli, main };
+module.exports = { createRunner, createBridge, resolveCommand, runProcess, readLimitedOutput, checkCli, main };
 if (require.main === module) main().catch(error => { console.error(error.message); process.exitCode = 1; });

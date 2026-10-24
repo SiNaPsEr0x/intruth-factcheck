@@ -55,7 +55,12 @@ const { root, createServer, launchBrowser, mockRuntime } = require('./browser-he
     const report = path.join(directory, 'report.html');
     await download.saveAs(report);
     const text = await fs.readFile(report, 'utf8');
-    assert.match(text, /gpt-6-luna/); assert.match(text, /https:\/\/example.org\/source/); assert.doesNotMatch(text, /<script>/);
+    const reportPage = await context.newPage();
+    await reportPage.setContent(text);
+    assert.match(await reportPage.locator('body').textContent(), /gpt-6-luna/);
+    assert.equal(await reportPage.locator('a.source-link').count(), 1);
+    assert.equal(await reportPage.locator('a.source-link').getAttribute('href'), 'https://example.org/source');
+    assert.equal(await reportPage.locator('script').count(), 0);
     await send({ type: 'STOP_FACTCHECK' });
     assert.equal(await page.locator('#rtfc-panel').count(), 0);
     assert.deepEqual(errors, []);

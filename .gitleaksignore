@@ -1,0 +1,4 @@
+# Upstream minified tokenizer expressions, not credential literals.
+# Only these exact historic findings are ignored; new code and vendor changes remain scanned.
+6e8f07c211c6cb4f7b1318240dd1c0963b6fe29c:realtime-factcheck/src/vendor/transformers.min.js:generic-api-key:13
+28985e23dc2494968fca021547a4a5f7d5c9ddc6:realtime-factcheck/src/vendor/transformers.min.js:generic-api-key:2

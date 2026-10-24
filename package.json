@@ -19,7 +19,9 @@
     "vendor": "node scripts/vendor.mjs",
     "versions": "node scripts/versions.cjs",
     "lint": "node scripts/check.js",
-    "package": "node scripts/package.js"
+    "package": "node scripts/package.js",
+    "security:sbom": "node scripts/security/vendor-sbom.cjs",
+    "security:audit": "npm audit --audit-level=low && node scripts/security/vendor-sbom.cjs --check"
   },
   "license": "SEE LICENSE IN LICENSE",
   "devDependencies": {

@@ -21,6 +21,8 @@ function walk(directory) {
   }
 }
 walk(root);
+const sbom = spawnSync(process.execPath, [path.join(root, 'scripts/security/vendor-sbom.cjs'), '--check'], { encoding: 'utf8' });
+if (sbom.status !== 0) throw new Error(sbom.stderr);
 const extension = path.join(root, 'realtime-factcheck');
 const manifest = JSON.parse(fs.readFileSync(path.join(extension, 'manifest.json'), 'utf8'));
 const assets = [manifest.background.service_worker, manifest.action.default_popup,
