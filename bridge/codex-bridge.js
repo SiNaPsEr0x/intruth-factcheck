@@ -7,7 +7,8 @@ const fsp = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
-const { DEFAULT_MODEL, modelId, validateClaims } = require('../realtime-factcheck/src/shared/protocol.js');
+const { DEFAULT_MODEL, modelId, cleanSources, validateClaims } = require('../realtime-factcheck/src/shared/protocol.js');
+const { extensionId } = require('./native-config.cjs');
 
 const SCHEMA = path.join(__dirname, 'claims.schema.json');
 const MAX_BODY = 128 * 1024;
@@ -105,6 +106,35 @@ function runProcess(command, args, { input = '', cwd, signal, timeout = 120000 }
   });
 }
 
+// Only treat a cited URL as observed evidence when the native Codex event stream
+// confirms that the corresponding page was opened (or searched within).
+// A completed search alone does not prove that a generated citation was visited.
+function sourceKey(value) {
+  const cleaned = cleanSources([value])[0];
+  if (!cleaned) return null;
+  const parsed = new URL(cleaned);
+  parsed.hash = '';
+  return parsed.href;
+}
+
+function observedSourceUrls(events) {
+  const observed = new Set();
+  for (const event of events) {
+    if (event.type !== 'item.completed' || event.item?.type !== 'web_search') continue;
+    const item = event.item;
+    if (!['open_page', 'find_in_page'].includes(item.action?.type)) continue;
+    // Treat a reported fetch/page failure as absent evidence.
+    if (Array.isArray(item.results) && item.results.some(result => result?.error)) continue;
+    const key = sourceKey(item.action.url);
+    if (key) observed.add(key);
+    for (const result of item.results || []) {
+      const resultKey = sourceKey(result?.url);
+      if (resultKey) observed.add(resultKey);
+    }
+  }
+  return observed;
+}
+
 async function readLimitedOutput(file, limit = MAX_OUTPUT) {
   const chunks = [];
   let size = 0;
@@ -138,7 +168,16 @@ function createRunner({ command = resolveCommand(), model = DEFAULT_MODEL, effor
       const events = stdout.split('\n').flatMap(line => { try { return [JSON.parse(line)]; } catch { return []; } });
       const searched = events.some(event => event.type === 'item.completed' && event.item?.type === 'web_search');
       if (payload.webSearch && !searched) throw new Error('Codex did not perform web search; this claim remains unverified.');
-      const claims = validateClaims(JSON.parse(await readLimitedOutput(output)));
+      let claims = validateClaims(JSON.parse(await readLimitedOutput(output)));
+      if (payload.webSearch) {
+        const opened = observedSourceUrls(events);
+        // Do not promote model-generated links to evidence unless Codex actually
+        // opened the cited URL. Unknown citations are not presented as sources.
+        claims = claims.map(claim => ({
+          ...claim,
+          sources: cleanSources(claim.sources).filter(url => opened.has(sourceKey(url))),
+        }));
+      }
       return { claims, model: modelId(payload.model || model), searched };
     } finally {
       await fsp.rm(directory, { recursive: true, force: true });
@@ -271,7 +310,7 @@ async function main() {
   const auth = new AuthManager(command);
   const server = createBridge({ runner, model, readiness, auth,
     maxConcurrent: positiveInt(process.env.MAX_CONCURRENT, 2, 'MAX_CONCURRENT'),
-    allowedExtensionId: process.env.INTRUTH_EXTENSION_ID || '' });
+    allowedExtensionId: process.env.INTRUTH_EXTENSION_ID || extensionId() });
   server.on('error', error => { console.error(error.message); process.exitCode = 1; });
   server.listen(port, '127.0.0.1', () => {
     console.log(`InTruth Codex bridge: http://127.0.0.1:${port} | ${model} | reasoning ${process.env.CODEX_REASONING_EFFORT || 'low'}`);
@@ -284,5 +323,5 @@ async function main() {
   });
 }
 
-module.exports = { createRunner, createBridge, resolveCommand, runProcess, readLimitedOutput, checkCli, main };
+module.exports = { createRunner, createBridge, resolveCommand, runProcess, readLimitedOutput, observedSourceUrls, checkCli, main };
 if (require.main === module) main().catch(error => { console.error(error.message); process.exitCode = 1; });
