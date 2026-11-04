@@ -141,7 +141,7 @@ test('source provenance excludes search-only and failed page events', () => {
   const open = { type: 'item.completed', item: { type: 'web_search', action, results: [{ url: page, content: 'Evidence' }] } };
   assert.equal(observedSourceUrls([search, fail]).size, 0);
   assert.equal(observedSourceUrls([search, open]).has(page), true);
-  assert.equal(observedSourceUrls([{ ...open, item: { ...open.item, action: { type: 'open_page', url: 'http://localhost/admin' } } }]).size, 1);
+  assert.equal(observedSourceUrls([{ ...open, item: { ...open.item, action: { type: 'open_page', url: 'http://localhost/admin' } } }]).size, 0);
 });
 
 test('native helper uses the fixed public extension identity', () => {
