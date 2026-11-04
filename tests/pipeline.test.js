@@ -147,3 +147,15 @@ test('grounded checks are not starved by queued preliminary requests', async () 
   assert.equal(dispatched.length, 5);
   assert.ok(dispatched.indexOf('web1') < dispatched.indexOf('fast3'));
 });
+
+test('export uses a clickable YouTube video timestamp and retains original statement', () => {
+  const context = vm.createContext({ InTruthProtocol: protocol, URL,
+    location: { href: 'https://www.youtube.com/watch?v=abc123' } });
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../realtime-factcheck/src/content/session-export.js'), 'utf8'), context);
+  context.fact = { ...claim, _timestamp: '1:23', originalTranscript: 'Earth orbits the Sun.' };
+  vm.runInContext('startSession(); logVerdict(fact);', context);
+  assert.equal(vm.runInContext('sessionLog[0].videoTimestamp', context), '1:23');
+  assert.equal(vm.runInContext('sessionLog[0].originalTranscript', context), 'Earth orbits the Sun.');
+  assert.match(vm.runInContext('videoTimestampHref(sessionLog[0].videoTimestamp)', context), /[?&]t=83s/);
+  assert.equal(vm.runInContext('videoTimestampHref("0:00");', context).includes('t=0s'), true);
+});
