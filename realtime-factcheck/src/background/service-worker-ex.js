@@ -393,6 +393,7 @@ async function evaluateClaims(contextText, title, lexicalSummary, lexicalSnapsho
         results: valid.map(r => ({
           ...r,
           model: SELECTED_MODEL,
+          originalTranscript: contextText.slice(0, 2000),
           sources:          [],
           pending:          true,
           lexical:          lexicalSnapshot,
@@ -435,6 +436,7 @@ async function groundAndUpdate(contextText, fastResults, title, lexicalSummary, 
     const speaker = dominantSpeaker || (fast.speaker && !/^Speaker\s*\d+$/i.test(fast.speaker) ? fast.speaker : 'Unknown');
     chrome.tabs.sendMessage(activeTabId, { type: 'UPDATE_VERDICTS', results: [{
       ...result, model: SELECTED_MODEL, pending: false, verificationFailed, lexical: lexicalSnapshot, speaker,
+      originalTranscript: contextText.slice(0, 2000),
       dominantSpeakerId, _fastClaim: fast.claim,
     }] }).catch(() => {});
   }));
