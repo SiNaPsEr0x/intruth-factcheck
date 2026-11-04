@@ -4,7 +4,8 @@ const assert = require('node:assert/strict');
 const path = require('node:path');
 const http = require('node:http');
 const { once } = require('node:events');
-const { createRunner, createBridge, readLimitedOutput, checkCli } = require('../bridge/codex-bridge.js');
+const { createRunner, createBridge, readLimitedOutput, observedSourceUrls, checkCli } = require('../bridge/codex-bridge.js');
+const { extensionId } = require('../bridge/native-config.cjs');
 const { modelId, cleanSources, validateClaims } = require('../realtime-factcheck/src/shared/protocol.js');
 const command = { bin: process.execPath, prefix: [path.join(__dirname, 'fixtures/codex.cjs')] };
 const payload = { prompt: 'Una frase in italiano: è verificabile?', instructions: 'Check the evidence.', webSearch: false };
@@ -62,7 +63,11 @@ test('CLI integration handles stdin, final JSON and actual search events', async
   assert.equal(fast.model, 'gpt-6-luna');
   assert.equal(fast.claims[0].verdict, 'TRUE');
   assert.equal(fast.searched, false);
-  assert.equal((await runner({ ...payload, webSearch: true })).searched, true);
+  const verified = await runner({ ...payload, webSearch: true });
+  assert.equal(verified.searched, true);
+  assert.deepEqual(verified.claims[0].sources, ['https://science.nasa.gov/earth/']);
+  assert.deepEqual((await runner({ ...payload, prompt: 'no-open', webSearch: true })).claims[0].sources, []);
+  assert.deepEqual((await runner({ ...payload, prompt: 'wrong-source', webSearch: true })).claims[0].sources, []);
   await assert.rejects(runner({ ...payload, prompt: 'no-search', webSearch: true }), /did not perform web search/);
   await assert.rejects(runner({ ...payload, prompt: 'invalid' }), /invalid claim/);
   await assert.rejects(runner({ ...payload, prompt: 'fail' }), /Model unavailable/);
@@ -126,4 +131,21 @@ test('readiness and concurrency failures return distinct HTTP errors', async t =
   assert.equal(second.status, 429);
   release({ claims: [] });
   assert.equal((await first).status, 200);
+});
+
+test('source provenance excludes search-only and failed page events', () => {
+  const page = 'https://science.nasa.gov/earth/';
+  const action = { type: 'open_page', url: page };
+  const search = { type: 'item.completed', item: { type: 'web_search', action: { type: 'search' }, results: [{ url: page }] } };
+  const fail = { type: 'item.completed', item: { type: 'web_search', action, results: [{ error: { status: 404 } }] } };
+  const open = { type: 'item.completed', item: { type: 'web_search', action, results: [{ url: page, content: 'Evidence' }] } };
+  assert.equal(observedSourceUrls([search, fail]).size, 0);
+  assert.equal(observedSourceUrls([search, open]).has(page), true);
+  assert.equal(observedSourceUrls([{ ...open, item: { ...open.item, action: { type: 'open_page', url: 'http://localhost/admin' } } }]).size, 1);
+});
+
+test('native helper uses the fixed public extension identity', () => {
+  const id = extensionId();
+  assert.match(id, /^[a-p]{32}$/);
+  assert.notEqual(id, 'a'.repeat(32));
 });
