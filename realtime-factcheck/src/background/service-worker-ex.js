@@ -131,10 +131,21 @@ const requestQueue = [];
 const requestControllers = new Set();
 let runningRequests = 0;
 let sessionId = 0;
+let fastDispatchesSinceGrounded = 0;
+
+function pickNextRequest() {
+  const fastIndex = requestQueue.findIndex(task => !task.webSearch);
+  const webIndex = requestQueue.findIndex(task => task.webSearch);
+  const useWeb = webIndex >= 0 && (fastIndex < 0 || fastDispatchesSinceGrounded >= 2);
+  const index = useWeb ? webIndex : fastIndex;
+  const task = requestQueue.splice(index, 1)[0];
+  fastDispatchesSinceGrounded = task.webSearch ? 0 : Math.min(fastDispatchesSinceGrounded + 1, 2);
+  return task;
+}
 
 function pumpRequests() {
   while (runningRequests < 2 && requestQueue.length) {
-    const task = requestQueue.shift();
+    const task = pickNextRequest();
     if (task.session !== sessionId) { task.reject(new Error('Session ended.')); continue; }
     runningRequests++;
     task.run().then(task.resolve, task.reject).finally(() => { runningRequests--; pumpRequests(); });
@@ -145,7 +156,7 @@ function callCodex(prompt, instructions, webSearch = false, session = sessionId)
   return new Promise((resolve, reject) => {
     if (session !== sessionId) { reject(new Error('Session ended.')); return; }
     if (requestQueue.length >= 16) { reject(new Error('Fact-check queue full. Pause the video to let Codex catch up.')); return; }
-    const task = { session, resolve, reject, run: async () => {
+    const task = { session, webSearch, resolve, reject, run: async () => {
       const controller = new AbortController();
       requestControllers.add(controller);
       const timer = setTimeout(() => controller.abort(), 125000);
@@ -168,7 +179,7 @@ function callCodex(prompt, instructions, webSearch = false, session = sessionId)
         requestControllers.delete(controller);
       }
     }};
-    if (webSearch) requestQueue.push(task); else requestQueue.unshift(task);
+    requestQueue.push(task);
     pumpRequests();
   });
 }
@@ -229,7 +240,8 @@ const CLAIM_DEDUP_MS = 200000;
  
 function normalizeClaimKey(claim) {
   // Keep short words and numbers: "2%" and "3%" must remain distinct claims.
-  return (claim.toLowerCase().normalize('NFKC').match(/[\p{L}\p{N}]+/gu) || []).sort().join(' ');
+  // Preserve word order: "Rome beats Milan" is not "Milan beats Rome".
+  return (claim.toLowerCase().normalize('NFKC').match(/[\p{L}\p{N}]+/gu) || []).join(' ');
 }
 
 function isDuplicate(claim) {
@@ -247,7 +259,18 @@ function isDuplicate(claim) {
     const previousWords = new Set(previous.split(' ').filter(Boolean));
     const overlap = [...words].filter(word => previousWords.has(word)).length;
     const union = new Set([...words, ...previousWords]).size;
-    if (words.size >= 5 && overlap / union >= 0.85) return true;
+    if (words.size >= 5 && overlap / union >= 0.85) {
+      // A bag-of-words match alone can collapse opposite statements.
+      const bigrams = value => {
+        const tokens = value.split(' ').filter(Boolean);
+        return new Set(tokens.slice(1).map((word, i) => tokens[i] + '\u0000' + word));
+      };
+      const currentPairs = bigrams(key);
+      const previousPairs = bigrams(previous);
+      const common = [...currentPairs].filter(pair => previousPairs.has(pair)).length;
+      const total = new Set([...currentPairs, ...previousPairs]).size;
+      if (total && common / total >= 0.85) return true;
+    }
   }
   recentClaims.set(key, [now, claim]);
   return false;
@@ -390,7 +413,7 @@ async function evaluateClaims(contextText, title, lexicalSummary, lexicalSnapsho
  
 async function groundAndUpdate(contextText, fastResults, title, lexicalSummary, lexicalSnapshot, dominantSpeaker, dominantSpeakerId, session) {
   const language = resolvedLanguage();
-  for (const fast of fastResults) {
+  await Promise.all(fastResults.map(async fast => {
     if (session !== sessionId) return;
     let result;
     let verificationFailed = false;
@@ -414,7 +437,7 @@ async function groundAndUpdate(contextText, fastResults, title, lexicalSummary, 
       ...result, model: SELECTED_MODEL, pending: false, verificationFailed, lexical: lexicalSnapshot, speaker,
       dominantSpeakerId, _fastClaim: fast.claim,
     }] }).catch(() => {});
-  }
+  }));
 }
 
 // ── State ─────────────────────────────────────────────────────────────────────
@@ -476,6 +499,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       if (!isCapturing) break;
       // always process transcript for pipeline — activeTabId only needed for forwarding to overlay
       if (msg.isFinal) {
+        const originalText = typeof msg.originalText === 'string' && msg.originalText.trim()
+          ? msg.originalText : msg.text;
         if (msg.speaker !== null && msg.speaker !== undefined) {
           currentSpeakerId = msg.speaker;
           if (activeTabId && !confirmedSpeakers.has(currentSpeakerId) && !speakerIdToName[currentSpeakerId]) {
@@ -486,11 +511,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
             }).catch(() => {});
           }
         }
-        onNewSentence(msg.text, currentSpeakerId);
+        onNewSentence(originalText, currentSpeakerId);
       }
       if (activeTabId) {
         chrome.tabs.sendMessage(activeTabId, {
-          type: 'TRANSCRIPT_RESULT', text: msg.text, isFinal: msg.isFinal, interim: msg.interim,
+          type: 'TRANSCRIPT_RESULT', text: msg.text, originalText: msg.originalText,
+          isFinal: msg.isFinal, interim: msg.interim,
         }).catch(() => {});
       }
       break;
@@ -602,6 +628,7 @@ async function stopFactCheck() {
   sessionId++;
   for (const controller of requestControllers) controller.abort();
   for (const task of requestQueue.splice(0)) task.reject(new Error('Session ended.'));
+  fastDispatchesSinceGrounded = 0;
   resetWindow();
   recentClaims.clear();
   pageTitle = ''; pageDate = '';
