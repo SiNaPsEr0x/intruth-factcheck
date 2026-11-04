@@ -82,6 +82,7 @@ function exportPDF() {
       const minutes = Math.floor(entry.secondsElapsed / 60);
       const seconds = entry.secondsElapsed % 60;
       const timestamp = entry.videoTimestamp || String(minutes).padStart(2, '0') + ':' + String(seconds).padStart(2, '0');
+      const timestampLabel = entry.videoTimestamp ? t('pdfVideoTime') : t('pdfSessionTime');
       const vcolor = verdictColor(entry.verdict, entry.confidence);
 
       const sourcesHTML = entry.sources.length
@@ -96,10 +97,12 @@ function exportPDF() {
           '<span class="claim-number">#' + (i + 1) + '</span>' +
           '<span class="verdict" style="color:' + vcolor + '">' + escapeHtml(tEnum('verdict', entry.verdict)) + '</span>' +
           '<span class="confidence">' + escapeHtml(tEnum('confidence', entry.confidence)) + escapeHtml(t('certaintySuffix')) + '</span>' +
-          '<span class="timestamp">' + escapeHtml(timestamp) + '</span>' +
+          '<span class="timestamp">' + escapeHtml(timestampLabel + ' ' + timestamp) + '</span>' +
         '</div>' +
         '<div class="claim-text">"' + escapeHtml(entry.claim) + '"</div>' +
         '<div class="explanation">' + escapeHtml(entry.verificationFailed ? t('verificationFailed') : entry.explanation) + '</div>' +
+        (entry.originalTranscript ? '<div class="explanation"><strong>' + escapeHtml(t('pdfOriginalTranscript')) +
+          '</strong> ' + escapeHtml(entry.originalTranscript) + '</div>' : '') +
         '<div class="speaker-row"><span class="speaker-label">' + escapeHtml(t('speakerConviction').trim()) + '</span> ' +
           escapeHtml(entry.speakerConfidence ? tEnum('confidence', entry.speakerConfidence) : t('notAvailable')) +
         '</div>' +
