@@ -44,7 +44,12 @@ headers, 429 concurrency limit, 503 CLI not ready, 502 inference/search failure.
 Native `codex exec --json` events establish whether a web-search item completed;
 merely asking the model to search is insufficient. The final response is read
 from `--output-last-message`, with `--output-schema` plus local validation.
-This proves tool use, not the correctness or provenance of every generated URL.
+The bridge also matches cited URLs to successful native page-open/find events,
+discarding citations not observed in an opened page. A generic search event or
+a syntactically valid URL is not enough. This establishes page-open provenance,
+**not** whether the page actually supports a claim; independent source review
+remains required. Older CLIs that omit page-open events fail closed with no
+accepted citations.
 
 ## Process and session lifecycle
 

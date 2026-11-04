@@ -71,6 +71,9 @@ const I18N = {
     pdfSources: 'Sources:',
     pdfSource: 'Source',
     pdfUnknown: 'Unknown',
+    pdfOriginalTranscript: 'Original transcript:',
+    pdfVideoTime: 'Video time',
+    pdfSessionTime: 'Session time',
   },
   it: {
     unverified: '⚠ non verificato',
@@ -128,6 +131,9 @@ const I18N = {
     pdfSources: 'Fonti:',
     pdfSource: 'Fonte',
     pdfUnknown: 'Sconosciuto',
+    pdfOriginalTranscript: 'Trascrizione originale:',
+    pdfVideoTime: 'Tempo video',
+    pdfSessionTime: 'Tempo sessione',
   },
 };
 
@@ -734,9 +740,12 @@ function getClaimTimestamp(claim) {
   const claimWords = new Set(claim.toLowerCase().split(/\s+/).filter(w => w.length >= 4));
   let bestMatch = null, bestScore = 0;
   for (const entry of sentenceTimestamps) {
-    const sentWords = entry.text.toLowerCase().split(/\s+/).filter(w => w.length >= 4);
-    const overlap = sentWords.filter(w => claimWords.has(w)).length;
-    const score = overlap / Math.max(claimWords.size, sentWords.length);
+    const candidates = [entry.text, entry.originalText].filter(text => typeof text === 'string');
+    const score = Math.max(0, ...candidates.map(text => {
+      const sentWords = text.toLowerCase().split(/\s+/).filter(w => w.length >= 4);
+      const overlap = sentWords.filter(w => claimWords.has(w)).length;
+      return overlap / Math.max(1, claimWords.size, sentWords.length);
+    }));
     if (score > bestScore) { bestScore = score; bestMatch = entry; }
   }
   return bestScore >= 0.3 ? bestMatch.timestamp : (lastTranscriptTimestamp || getVideoTimestamp());
@@ -998,7 +1007,7 @@ chrome.runtime.onMessage.addListener((msg) => {
       } else if (msg.isFinal) {
         const ts = getVideoTimestamp();
         lastTranscriptTimestamp = ts;
-        sentenceTimestamps.push({ text: msg.text, timestamp: ts });
+        sentenceTimestamps.push({ text: msg.text, originalText: msg.originalText, timestamp: ts });
         if (sentenceTimestamps.length > MAX_TIMESTAMP_BUFFER) sentenceTimestamps.shift();
         clearInterim();
         // strip [Speaker N] prefix before displaying

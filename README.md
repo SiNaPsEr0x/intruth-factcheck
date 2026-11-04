@@ -77,7 +77,10 @@ La prima risposta è provvisoria. Dopo la ricerca sul web, il giudizio può
 cambiare in entrambe le direzioni. Se la ricerca fallisce o non trova fonti
 utilizzabili, l'affermazione resta **NON VERIFICABILE**, con confidenza bassa.
 Controlla comunque i link: una fonte citata può essere poco pertinente e anche
-la trascrizione può contenere errori.
+la trascrizione può contenere errori. InTruth accetta come fonti solo URL di
+pagine che gli eventi Codex attestano come aperte; senza tale riscontro la
+verifica resta non verificabile. Il report conserva la trascrizione originale
+e il minuto del video, con un collegamento diretto al punto citato su YouTube.
 
 InTruth analizza due segmenti di trascrizione per volta. Se ne rimane uno solo,
 lo elabora dopo 10 secondi senza altri segmenti finali. Un segmento Whisper può

@@ -4,6 +4,19 @@
 
 const sessionLog = [];
 let sessionStartTime = null;
+let sessionVideoUrl = '';
+
+function videoTimestampHref(timestamp) {
+  if (!/^\d{1,3}:\d{2}(?::\d{2})?$/.test(timestamp)) return '';
+  try {
+    const url = new URL(sessionVideoUrl);
+    if (!['youtube.com', 'www.youtube.com', 'm.youtube.com'].includes(url.hostname)) return '';
+    const seconds = timestamp.split(':').map(Number).reduce((total, value) => total * 60 + value, 0);
+    url.searchParams.set('t', String(seconds) + 's');
+    return url.href;
+  } catch { return ''; }
+}
+
 
 function logVerdict(result) {
   const claimId = (result._fastClaim || result.claim).toLowerCase();
@@ -14,6 +27,8 @@ function logVerdict(result) {
     verificationFailed: result.verificationFailed === true,
     timestamp: new Date().toISOString(),
     secondsElapsed: sessionStartTime ? Math.round((Date.now() - sessionStartTime) / 1000) : 0,
+    videoTimestamp: typeof result._timestamp === 'string' ? result._timestamp : '',
+    originalTranscript: typeof result.originalTranscript === 'string' ? result.originalTranscript.slice(0, 2000) : '',
     claim: result.claim,
     verdict: result.verdict,
     confidence: result.confidence,
@@ -30,6 +45,7 @@ function logVerdict(result) {
 function startSession() {
   sessionLog.length = 0;
   sessionStartTime = Date.now();
+  sessionVideoUrl = typeof location !== 'undefined' ? location.href : '';
 }
 
 function stopSession() {
@@ -79,7 +95,12 @@ function exportPDF() {
     const cardsHTML = speakerGroups[spk].map(({ entry, i }) => {
       const minutes = Math.floor(entry.secondsElapsed / 60);
       const seconds = entry.secondsElapsed % 60;
-      const timestamp = String(minutes).padStart(2, '0') + ':' + String(seconds).padStart(2, '0');
+      const timestamp = entry.videoTimestamp || String(minutes).padStart(2, '0') + ':' + String(seconds).padStart(2, '0');
+      const timestampLabel = entry.videoTimestamp ? t('pdfVideoTime') : t('pdfSessionTime');
+      const playbackHref = entry.videoTimestamp ? videoTimestampHref(entry.videoTimestamp) : '';
+      const timestampHTML = playbackHref
+        ? '<a class="timestamp" href="' + escapeHtml(playbackHref) + '" rel="noopener noreferrer">' + escapeHtml(timestampLabel + ' ' + timestamp) + '</a>'
+        : '<span class="timestamp">' + escapeHtml(timestampLabel + ' ' + timestamp) + '</span>';
       const vcolor = verdictColor(entry.verdict, entry.confidence);
 
       const sourcesHTML = entry.sources.length
@@ -94,10 +115,12 @@ function exportPDF() {
           '<span class="claim-number">#' + (i + 1) + '</span>' +
           '<span class="verdict" style="color:' + vcolor + '">' + escapeHtml(tEnum('verdict', entry.verdict)) + '</span>' +
           '<span class="confidence">' + escapeHtml(tEnum('confidence', entry.confidence)) + escapeHtml(t('certaintySuffix')) + '</span>' +
-          '<span class="timestamp">' + escapeHtml(timestamp) + '</span>' +
+          timestampHTML +
         '</div>' +
         '<div class="claim-text">"' + escapeHtml(entry.claim) + '"</div>' +
         '<div class="explanation">' + escapeHtml(entry.verificationFailed ? t('verificationFailed') : entry.explanation) + '</div>' +
+        (entry.originalTranscript ? '<div class="explanation"><strong>' + escapeHtml(t('pdfOriginalTranscript')) +
+          '</strong> ' + escapeHtml(entry.originalTranscript) + '</div>' : '') +
         '<div class="speaker-row"><span class="speaker-label">' + escapeHtml(t('speakerConviction').trim()) + '</span> ' +
           escapeHtml(entry.speakerConfidence ? tEnum('confidence', entry.speakerConfidence) : t('notAvailable')) +
         '</div>' +

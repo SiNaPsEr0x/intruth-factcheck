@@ -129,8 +129,11 @@ let audioContext  = null;
 let worklet       = null;
 let active        = false;
 
-// rolling Float32 buffer of audio not yet committed as a final utterance
-let audio           = new Float32Array(0);
+// Fixed-capacity ring buffer: incoming PCM is copied once. Whisper receives a
+// contiguous snapshot only when an inference pass actually starts.
+const audio = new Float32Array(MAX_SAMPLES);
+let audioSize = 0;
+let audioWrite = 0;
 let inferenceTimer  = null;
 let busy            = false;
 let captureEpoch = 0;
@@ -254,7 +257,8 @@ async function startCapture(streamId, lang = 'en', modelSize) {
 
   // 4) Drop the audio buffered during model load so the first pass isn't a huge
   //    backlog, then start transcribing.
-  audio = new Float32Array(0);
+  audioSize = 0;
+  audioWrite = 0;
   startInferenceLoop();
 }
 
@@ -298,11 +302,22 @@ function appendAudio(chunk) {
     lastVoiceSample = audioEndSample;
   }
 
-  // append to the rolling buffer, capping at MAX_SAMPLES (drop oldest)
-  const merged = new Float32Array(audio.length + chunk.length);
-  merged.set(audio, 0);
-  merged.set(chunk, audio.length);
-  audio = merged.length > MAX_SAMPLES ? merged.slice(merged.length - MAX_SAMPLES) : merged;
+  // Append to a fixed-size ring: no growing allocation on every PCM batch.
+  const next = chunk.length > MAX_SAMPLES ? chunk.subarray(chunk.length - MAX_SAMPLES) : chunk;
+  const first = Math.min(next.length, MAX_SAMPLES - audioWrite);
+  audio.set(next.subarray(0, first), audioWrite);
+  if (next.length > first) audio.set(next.subarray(first), 0);
+  audioWrite = (audioWrite + next.length) % MAX_SAMPLES;
+  audioSize = Math.min(MAX_SAMPLES, audioSize + chunk.length);
+}
+
+function snapshotAudio() {
+  const contiguous = new Float32Array(audioSize);
+  const start = (audioWrite - audioSize + MAX_SAMPLES) % MAX_SAMPLES;
+  const first = Math.min(audioSize, MAX_SAMPLES - start);
+  contiguous.set(audio.subarray(start, start + first));
+  if (audioSize > first) contiguous.set(audio.subarray(0, audioSize - first), first);
+  return contiguous;
 }
 
 // ── Inference loop (sliding window + VAD commit) ──────────────────────────────
@@ -315,11 +330,11 @@ function startInferenceLoop() {
 
 async function runInference() {
   if (!active || busy) return;
-  if (audio.length < MIN_INFER_SAMPLES) return;
+  if (audioSize < MIN_INFER_SAMPLES) return;
   if (!hasSpeechSinceCommit) return; // only silence since last commit — nothing to do
 
   const silenceMs = Date.now() - lastVoiceTime;
-  const bufferFull = audio.length >= MAX_SAMPLES * 0.95;
+  const bufferFull = audioSize >= MAX_SAMPLES * 0.95;
   // Commit a final when the speaker pauses long enough, or the 30s window is
   // about to overflow (long monologue with no pause).
   const shouldCommit = hasSpeechSinceCommit && (silenceMs >= SILENCE_COMMIT_MS || bufferFull);
@@ -327,7 +342,7 @@ async function runInference() {
   busy = true;
   const epoch = captureEpoch;
   const snapshotEnd = audioEndSample;
-  const snapshot = audio; // transcribe the current window
+  const snapshot = snapshotAudio(); // immutable contiguous view for Whisper
   try {
     let streamed = '';
     const streamer = new WhisperTextStreamer(transcriber.tokenizer, {
@@ -365,14 +380,14 @@ async function runInference() {
         // Whisper does not diarize; speaker is null and Codex attributes it
         // from the surrounding context (speaker names / page title).
         chrome.runtime.sendMessage({
-          type: 'TRANSCRIPT_RESULT', text: shown, isFinal: true, interim: false, speaker: null,
+          type: 'TRANSCRIPT_RESULT', text: shown, originalText: text,
+          isFinal: true, interim: false, speaker: null,
         }).catch(() => {});
         chrome.runtime.sendMessage({ type: 'UTTERANCE_END' }).catch(() => {});
       }
       // drop the committed window but keep any audio that streamed in during
       // inference (snapshot is a prefix of the current buffer); reset the VAD.
-      const bufferStart = audioEndSample - audio.length;
-      audio = audio.slice(Math.max(0, snapshotEnd - bufferStart));
+      audioSize = Math.max(0, Math.min(audioSize, audioEndSample - snapshotEnd));
       hasSpeechSinceCommit = lastVoiceSample > snapshotEnd;
     } else if (text) {
       chrome.runtime.sendMessage({
@@ -401,7 +416,8 @@ function stopCapture() {
   audioEndSample = 0;
   lastVoiceSample = 0;
   if (inferenceTimer) { clearInterval(inferenceTimer); inferenceTimer = null; }
-  audio = new Float32Array(0);
+  audioSize = 0;
+  audioWrite = 0;
   busy = false;
   hasSpeechSinceCommit = false;
 

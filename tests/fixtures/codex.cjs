@@ -16,10 +16,17 @@ process.stdin.on('end', () => {
   }
   const output = args[args.indexOf('--output-last-message') + 1];
   const claim = { claim: 'La Terra orbita attorno al Sole.', verdict: 'TRUE', confidence: 'HIGH',
-    explanation: 'Le osservazioni astronomiche lo confermano.', sources: ['https://science.nasa.gov/earth/'],
+    explanation: 'Le osservazioni astronomiche lo confermano.', sources: [prompt === 'wrong-source' ? 'https://example.org/other' : 'https://science.nasa.gov/earth/'],
     speaker: 'Unknown', speaker_confidence: 'MEDIUM', speaker_confidence_explanation: 'Affermazione diretta.' };
   const payload = prompt === 'invalid' ? { claims: [{ ...claim, verdict: 'MAYBE' }] } : { claims: [claim] };
   fs.writeFileSync(output, JSON.stringify(payload));
-  if (args.includes('web_search="live"') && prompt !== 'no-search') console.log(JSON.stringify({ type: 'item.completed', item: { type: 'web_search', query: prompt } }));
+  if (args.includes('web_search="live"') && prompt !== 'no-search') {
+    console.log(JSON.stringify({ type: 'item.completed', item: { type: 'web_search', query: prompt, action: { type: 'search', query: prompt } } }));
+    if (prompt !== 'no-open') console.log(JSON.stringify({ type: 'item.completed', item: {
+      type: 'web_search', query: 'https://science.nasa.gov/earth/',
+      action: { type: 'open_page', url: 'https://science.nasa.gov/earth/' },
+      results: [{ url: 'https://science.nasa.gov/earth/', content: 'Evidence of the orbit.' }],
+    } }));
+  }
   process.stdout.write(JSON.stringify({ type: 'turn.completed' }));
 });
