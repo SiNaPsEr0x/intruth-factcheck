@@ -14,6 +14,8 @@ function logVerdict(result) {
     verificationFailed: result.verificationFailed === true,
     timestamp: new Date().toISOString(),
     secondsElapsed: sessionStartTime ? Math.round((Date.now() - sessionStartTime) / 1000) : 0,
+    videoTimestamp: typeof result._timestamp === 'string' ? result._timestamp : '',
+    originalTranscript: typeof result.originalTranscript === 'string' ? result.originalTranscript.slice(0, 2000) : '',
     claim: result.claim,
     verdict: result.verdict,
     confidence: result.confidence,
@@ -79,7 +81,7 @@ function exportPDF() {
     const cardsHTML = speakerGroups[spk].map(({ entry, i }) => {
       const minutes = Math.floor(entry.secondsElapsed / 60);
       const seconds = entry.secondsElapsed % 60;
-      const timestamp = String(minutes).padStart(2, '0') + ':' + String(seconds).padStart(2, '0');
+      const timestamp = entry.videoTimestamp || String(minutes).padStart(2, '0') + ':' + String(seconds).padStart(2, '0');
       const vcolor = verdictColor(entry.verdict, entry.confidence);
 
       const sourcesHTML = entry.sources.length
