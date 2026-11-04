@@ -113,6 +113,10 @@ function sourceKey(value) {
   const cleaned = cleanSources([value])[0];
   if (!cleaned) return null;
   const parsed = new URL(cleaned);
+  const host = parsed.hostname.toLowerCase().replace(/\.$/, '');
+  // A citation must be a public website, never a localhost or network endpoint.
+  if (host === 'localhost' || /\.(?:localhost|local|internal|test|invalid)$/.test(host) ||
+      /^[0-9.]+$/.test(host) || host.startsWith('[')) return null;
   parsed.hash = '';
   return parsed.href;
 }
@@ -127,8 +131,10 @@ function observedSourceUrls(events) {
     if (Array.isArray(item.results) && item.results.some(result => result?.error)) continue;
     const key = sourceKey(item.action.url);
     if (key) observed.add(key);
-    for (const result of item.results || []) {
-      const resultKey = sourceKey(result?.url);
+    // Some older CLI events omit action.url; only then use an unambiguous,
+    // successful result URL. Never credit a different URL as the opened page.
+    else if (!item.action.url && item.results?.length === 1) {
+      const resultKey = sourceKey(item.results[0]?.url);
       if (resultKey) observed.add(resultKey);
     }
   }
