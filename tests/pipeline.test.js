@@ -11,6 +11,7 @@ const nextTurn = () => new Promise(resolve => setImmediate(resolve));
 
 function worker(fetch) {
   const messages = [], stored = { retiredSetting: 'unused-value', rtfcPanelWidth: 420 };
+  const listeners = {};
   const event = () => ({ addListener() {} });
   const chrome = {
     storage: { local: {
@@ -18,7 +19,7 @@ function worker(fetch) {
       set: async values => Object.assign(stored, values),
       remove: async keys => { for (const key of keys) delete stored[key]; },
     } },
-    runtime: { onConnect: event(), onStartup: event(), onMessage: event(),
+    runtime: { onConnect: event(), onStartup: event(), onMessage: { addListener(fn) { listeners.message = fn; } },
       sendMessage: async () => ({ ok: true }), getPlatformInfo() {} },
     tabs: { sendMessage: async (tab, message) => { messages.push({ tab, ...message }); }, onRemoved: event(), onUpdated: event() },
     offscreen: { getContexts: async () => [] },
@@ -29,7 +30,7 @@ function worker(fetch) {
     setTimeout, clearTimeout, setInterval: () => 0, clearInterval() {}, console: { log() {}, error() {}, warn() {} } });
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../realtime-factcheck/src/background/service-worker-ex.js'), 'utf8'), context);
   vm.runInContext('activeTabId = 1; isCapturing = true;', context);
-  return { context, messages, stored };
+  return { context, messages, stored, dispatch: msg => listeners.message(msg, {}, () => {}) };
 }
 
 async function runEvaluation(context) {
@@ -112,4 +113,37 @@ test('session export replaces a timed-out entry with its late verified answer', 
   assert.equal(vm.runInContext('sessionLog.length', context), 1);
   assert.equal(vm.runInContext('sessionLog[0].verdict', context), 'TRUE');
   assert.equal(vm.runInContext('sessionLog[0].sources.length', context), 1);
+});
+
+test('raw transcript is used for fact-checking while translated text stays visible', () => {
+  const { context, dispatch, messages } = worker();
+  dispatch({ type: 'TRANSCRIPT_RESULT', isFinal: true, text: 'La Terra orbita il Sole.',
+    originalText: 'Earth orbits the Sun.', speaker: null });
+  assert.equal(vm.runInContext('sentenceWindow.at(-1).text', context), 'Earth orbits the Sun.');
+  assert.equal(messages.find(message => message.type === 'TRANSCRIPT_RESULT').text, 'La Terra orbita il Sole.');
+});
+
+test('reversing the subject and object does not become a duplicate claim', () => {
+  const { context } = worker();
+  assert.equal(vm.runInContext('isDuplicate("Roma supera Milano nel confronto del 2025")', context), false);
+  assert.equal(vm.runInContext('isDuplicate("Milano supera Roma nel confronto del 2025")', context), false);
+  assert.equal(vm.runInContext('isDuplicate("Roma supera Milano nel confronto del 2025")', context), true);
+});
+
+test('grounded checks are not starved by queued preliminary requests', async () => {
+  const { context } = worker();
+  vm.runInContext(`
+    const dispatchOrder = [];
+    runningRequests = 2;
+    for (const [name, webSearch] of [['fast1',false],['fast2',false],['fast3',false],['web1',true],['fast4',false]]) {
+      requestQueue.push({ session: sessionId, webSearch, resolve() {}, reject() {},
+        run() { dispatchOrder.push(name); return Promise.resolve(); } });
+    }
+    runningRequests = 0;
+    pumpRequests();
+  `, context);
+  for (let i = 0; i < 12; i++) await nextTurn();
+  const dispatched = Array.from(vm.runInContext('dispatchOrder', context));
+  assert.equal(dispatched.length, 5);
+  assert.ok(dispatched.indexOf('web1') < dispatched.indexOf('fast3'));
 });
