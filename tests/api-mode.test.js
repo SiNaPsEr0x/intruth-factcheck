@@ -107,7 +107,7 @@ test('Exa web search grounds sources to URLs actually returned by the search', a
     req.on('end', () => {
       const parsed = JSON.parse(body);
       assert.match(parsed.messages[1].content, /Web search results \(Exa\)/);
-      assert.match(parsed.messages[1].content, /(?:^|\n)https:\/\/nasa\.gov\/earth(?:\n|$)/);
+      assert.match(parsed.messages[1].content, /(?:^|\n)- https:\/\/nasa\.gov\/earth( |—|\n)/);
       const claims = [{ ...claim, sources: ['https://nasa.gov/earth', 'https://hallucinated.example/fake'] }];
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ claims }) } }] }));
