@@ -16,7 +16,7 @@ si usa il login di Codex: nel popup non devi inserire chiavi API.
 
 ## Installazione
 
-1. Scarica lo [ZIP del progetto](https://github.com/SiNaPsEr0x/intruth-factcheck/archive/refs/heads/master.zip)
+1. Scarica lo [ZIP del progetto](https://github.com/SiNaPsEr0x/intruth-factcheck/archive/refs/heads/main.zip)
    ed estrailo.
 2. Sul computer in cui usi il browser, esegui `Install-InTruth.cmd` su Windows
    oppure `Install-InTruth.command` su macOS o Linux. Basta farlo una volta:
@@ -239,7 +239,7 @@ I risultati delle verifiche sono in [VALIDATION.md](docs/VALIDATION.md).
 
 ## Controlli di sicurezza
 
-GitHub Actions esegue i controlli a ogni PR, a ogni push su `master` e ogni notte.
+GitHub Actions esegue i controlli a ogni PR, a ogni push su `main` e ogni notte.
 Puoi avviarli anche manualmente. La pipeline include OSV-Scanner sul lockfile e
 sullo SBOM dei runtime distribuiti, `npm audit`, CodeQL per JavaScript e Actions,
 Gitleaks sull'intera cronologia, actionlint e zizmor. Controlla anche i test su
@@ -248,7 +248,7 @@ Node 22, 24 e 26, gli installer Windows e macOS, il browser, i bundle e gli ZIP.
 Dependabot propone gli aggiornamenti delle dipendenze e delle Actions. La
 manutenzione quotidiana prova a correggere il lockfile con
 `npm audit fix --package-lock-only --ignore-scripts`, senza `--force`, e apre
-una PR quando trova una modifica. Anche una scansione fallita su `master`
+una PR quando trova una modifica. Anche una scansione fallita su `main`
 attiva questo tentativo. Se non c'è una correzione compatibile, il problema
 resta segnalato e i controlli rimangono bloccati.
 
@@ -295,7 +295,7 @@ InTruth checks claims in YouTube and Jubilee videos. Whisper transcribes the
 audio in your browser; Codex analyses the text and searches the web. Results
 appear beside the video with links to their sources.
 
-To install, download and extract the [project ZIP](https://github.com/SiNaPsEr0x/intruth-factcheck/archive/refs/heads/master.zip).
+To install, download and extract the [project ZIP](https://github.com/SiNaPsEr0x/intruth-factcheck/archive/refs/heads/main.zip).
 Run `Install-InTruth.cmd` on Windows or `Install-InTruth.command` on macOS/Linux
 once, on the computer where you use the browser. In `chrome://extensions`,
 enable Developer mode and load the `realtime-factcheck` folder as an unpacked

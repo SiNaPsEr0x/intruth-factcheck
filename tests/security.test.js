@@ -36,7 +36,7 @@ function mergeFixture() {
   const sha = 'a'.repeat(40), base = 'b'.repeat(40), bot = 'dependabot[bot]';
   const candidate = { number: 42, user: { login: bot }, draft: false,
     head: { sha, ref: 'dependabot/npm_and_yarn/tool-1.2.4', repo: { full_name: 'owner/repo' } } };
-  const pr = { ...candidate, base: { sha: base, ref: 'master' }, mergeable: true, mergeable_state: 'clean' };
+  const pr = { ...candidate, base: { sha: base, ref: 'main' }, mergeable: true, mergeable_state: 'clean' };
   const run = { id: 123, path: '.github/workflows/check.yml', status: 'completed', conclusion: 'success', head_sha: sha };
   const jobs = ['setup-platforms (windows-latest)', 'setup-platforms (macos-latest)', 'check (22)', 'check (24)', 'check (26)', 'browser', 'audit', 'osv / osv-scan',
     'codeql (javascript-typescript)', 'codeql (actions)', 'secrets', 'workflow-security', 'Security gate']
@@ -48,7 +48,7 @@ function mergeFixture() {
   const github = { paginate: (fn, options) => fn(options), rest: {
     actions: { getWorkflowRun: response(() => run), listJobsForWorkflowRun: list(() => state.jobs),
       createWorkflowDispatch: async options => state.dispatched.push(options) },
-    repos: { get: response(() => ({ default_branch: 'master' })),
+    repos: { get: response(() => ({ default_branch: 'main' })),
       getBranch: response(() => ({ commit: { sha: base } })),
       compareCommitsWithBasehead: response(() => ({ status: 'ahead', behind_by: state.behind })),
       getContent: response(() => ({ content: Buffer.from(JSON.stringify({ scripts: { test: 'node --test' } })).toString('base64') })) },
@@ -65,7 +65,7 @@ test('automatic merge binds signed bot updates to the tested SHA and reruns defa
   await require('../scripts/security/merge-updates.cjs')(fixture);
   assert.equal(fixture.state.merged.length, 1);
   assert.equal(fixture.state.merged[0].sha, fixture.context.payload.workflow_run.head_sha);
-  assert.equal(fixture.state.dispatched[0].ref, 'master');
+  assert.equal(fixture.state.dispatched[0].ref, 'main');
 });
 test('automatic merge rejects incomplete checks, stale heads, unsigned commits, foreign code and review vetoes', async () => {
   const changes = [

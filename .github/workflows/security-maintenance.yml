@@ -1,7 +1,7 @@
 name: Security maintenance
 on:
   push:
-    branches: [master]
+    branches: [main]
     paths: ['.github/workflows/security-maintenance.yml', 'scripts/security/**']
   schedule:
     - cron: '43 4 * * *'
@@ -20,7 +20,7 @@ jobs:
     if: >-
       github.event_name != 'workflow_run' ||
       (github.event.workflow_run.conclusion == 'failure' &&
-       github.event.workflow_run.head_branch == 'master' &&
+       github.event.workflow_run.head_branch == 'main' &&
        github.event.workflow_run.head_repository.full_name == github.repository)
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -32,7 +32,7 @@ jobs:
       # Only default-branch code is executed with the maintenance token.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: master
+          ref: main
           persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
@@ -53,7 +53,7 @@ jobs:
         id: fix
         with:
           branch: security/npm-audit-fix
-          base: master
+          base: main
           add-paths: package-lock.json
           sign-commits: true
           commit-message: 'fix(deps): apply compatible npm security fixes'
@@ -85,7 +85,7 @@ jobs:
       # Never check out a PR head, execute its scripts, or download its artifacts here.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: master
+          ref: main
           persist-credentials: false
       - uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         with:

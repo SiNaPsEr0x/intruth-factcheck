@@ -1,6 +1,6 @@
 # Security
 
-The maintained configuration is the default `master` branch. The extension and
+The maintained configuration is the default `main` branch. The extension and
 bridge are a personal, single-user local tool. They are not a remotely exposed
 or multi-user inference service. Report suspected vulnerabilities privately to
 the repository owner without posting credentials or sensitive transcripts.
@@ -45,7 +45,7 @@ ONNX Web/Common updates are grouped. Major updates are proposed but never merged
 automatically by this repository's handler.
 
 `Security maintenance` also runs daily at 04:43 UTC, after changes to its own
-workflow/scripts on `master`, and after a failed default-branch CI scan. It
+workflow/scripts on `main`, and after a failed default-branch CI scan. It
 applies compatible npm lockfile fixes without `--force` or lifecycle scripts,
 tests the result and opens/updates `security/npm-audit-fix`. It explicitly
 dispatches CI because PRs created with `GITHUB_TOKEN` do not trigger it normally.

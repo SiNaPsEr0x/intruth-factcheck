@@ -1,7 +1,7 @@
 name: Check InTruth Codex
 on:
   push:
-    branches: [master]
+    branches: [main]
   pull_request:
   merge_group:
   workflow_dispatch:
