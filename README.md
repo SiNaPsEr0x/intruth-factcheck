@@ -113,6 +113,22 @@ effettivo. Se serve, accedi di nuovo dal popup oppure esegui
 `npm exec -- codex login` sul computer del browser. Restano validi i limiti di
 utilizzo e di frequenza del tuo account Codex.
 
+### API diretta (OpenAI-compatibile, opzionale)
+
+In alternativa al login Codex puoi usare un servizio di terze parti compatibile
+con l'API OpenAI: nel popup inserisci **URL base API** (es.
+`https://api.openai.com/v1`; è accettato anche `http://127.0.0.1:...` per
+provider locali come Ollama) e **API key**, e choisisci il modello nel campo
+sopra. Con entrambi impostati, il fact-checking chiama direttamente
+`POST {URL base}/chat/completions` invece della CLI Codex: non serve il login
+ChatGPT. La chiave viene inviata solo al componente locale in ascolto su
+`127.0.0.1:8787`, che la usa nell'header `Authorization` e non la registra né
+la salva. Aggiungi anche una **API key Exa** (`api.exa.ai`) per fare la ricerca
+web reale direttamente dal componente locale: i verdetti del secondo passaggio
+citano allora solo le fonti effettivamente restituite dalla ricerca. Senza la
+chiave Exa, in modalità API le fonti restano quelle citate dal modello, filtrate
+a URL web pubblici.
+
 ## Privacy
 
 Whisper elabora l'audio nel browser. Il testo della trascrizione, il titolo,
@@ -121,7 +137,10 @@ tramite Codex. La ricerca web usa i servizi di ricerca di Codex. A questi dati
 si applicano le condizioni e le impostazioni privacy del servizio e del tuo
 account.
 
-Codex gestisce le credenziali; l'estensione non salva chiavi API nel browser.
+Codex gestisce le credenziali; in modalità Codex l'estensione non salva chiavi
+API nel browser. Nella modalità API diretta opzionale la chiave resta nel
+`chrome.storage` locale del browser e viene trasmessa solo al componente locale
+in ascolto su `127.0.0.1`.
 I modelli audio rimangono nella cache locale. Il bridge elimina i propri file
 temporanei e non conserva trascrizioni o sessioni in un archivio proprio;
 questo non riguarda l'eventuale conservazione dei dati da parte del servizio.
@@ -291,7 +310,12 @@ saves an HTML report that you can print to PDF.
 
 The default model is `gpt-6-luna` with `low` reasoning. It must be available to
 your Codex account; you can enter another exact model ID in the popup. Your
-account's usage limits apply. To check access manually, run `npm run check`,
+account's usage limits apply. Alternatively, set an **API base URL** and **API
+key** in the popup to use any OpenAI-compatible third-party service directly
+(`POST {base URL}/chat/completions`) without the ChatGPT sign-in; the key is
+sent only to the local helper on `127.0.0.1`. Add an **Exa API key** to also run
+real web search (api.exa.ai) from the local helper, so grounded verdicts cite
+only sources the search actually found. To check access manually, run `npm run check`,
 then `npm run verify`; `npm run verify:web` also tests web search. The last two
 commands make real requests and use your account's quota.
 

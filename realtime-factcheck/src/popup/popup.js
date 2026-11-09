@@ -1,4 +1,4 @@
-const { DEFAULT_MODEL, BRIDGE_URL, readSettings, modelId } = InTruthProtocol;
+const { DEFAULT_MODEL, BRIDGE_URL, readSettings, modelId, apiBaseUrl, apiKey } = InTruthProtocol;
 // popup.js
 
 const toggleBtn   = document.getElementById('toggleBtn');
@@ -9,6 +9,9 @@ const keysSection = document.getElementById('keysSection');
 const languageEl  = document.getElementById('languageSelect');
 const langFlagEl  = document.getElementById('langFlag');
 const modelEl     = document.getElementById('modelSelect');
+const apiBaseUrlEl = document.getElementById('apiBaseUrl');
+const apiKeyEl    = document.getElementById('apiKey');
+const exaKeyEl    = document.getElementById('exaKey');
 const recordingDateEl = document.getElementById('recordingDate');
 const cacheListEl  = document.getElementById('cacheList');
 const cacheTotalEl = document.getElementById('cacheTotal');
@@ -40,6 +43,11 @@ const P_I18N = {
     cacheTotal: 'Total: ',
     cacheClear: 'Clear cache',
     labelModel: 'Codex model',
+    labelApiUrl: 'API base URL (optional, OpenAI-compatible)',
+    labelApiKey: 'API key (optional)',
+    apiHint: 'With both set, fact-checking calls the API directly instead of Codex. Sent only to the local helper on this computer.',
+    labelExaKey: 'Exa API key (web search, optional)',
+    exaHint: 'In direct API mode, performs real web search via api.exa.ai so verdicts cite sources actually found online. Sent only to the local helper.',
     bridgeHint: 'Connects automatically. Sign in on the official ChatGPT page when prompted.',
     labelWhisper: 'Transcription (local, WebGPU)',
     optTiny: 'Tiny — fastest, least accurate',
@@ -70,6 +78,11 @@ const P_I18N = {
     cacheTotal: 'Totale: ',
     cacheClear: 'Svuota cache',
     labelModel: 'Modello Codex',
+    labelApiUrl: 'URL base API (facoltativo, compatibile OpenAI)',
+    labelApiKey: 'API key (facoltativa)',
+    apiHint: 'Se entrambi sono impostati, il fact-checking chiama direttamente l’API invece di Codex. Inviati solo al componente locale su questo computer.',
+    labelExaKey: 'API key Exa (ricerca web, facoltativa)',
+    exaHint: 'In modalità API diretta esegue una ricerca web reale tramite api.exa.ai, così i verdetti citano fonti trovate davvero online. Inviata solo al componente locale.',
     bridgeHint: 'Si collega automaticamente. Quando richiesto, accedi sulla pagina ufficiale ChatGPT.',
     labelWhisper: 'Trascrizione (locale, WebGPU)',
     optTiny: 'Tiny — il più veloce, meno accurato',
@@ -111,6 +124,9 @@ async function initializeSettings() {
   languageEl.value = data.transcriptLanguage || 'auto';
   recordingDateEl.value = data.recordingDate || '';
   try { modelEl.value = modelId(data.selectedModel); } catch { modelEl.value = DEFAULT_MODEL; }
+  try { apiBaseUrlEl.value = apiBaseUrl(data.apiBaseUrl || ''); } catch { apiBaseUrlEl.value = ''; }
+  apiKeyEl.value = typeof data.apiKey === 'string' ? data.apiKey : '';
+  exaKeyEl.value = typeof data.exaApiKey === 'string' ? data.exaApiKey : '';
   updateFlag();
   settingsReady = true;
   updateHint();
@@ -134,6 +150,35 @@ modelEl.addEventListener('change', async () => {
   }
 });
 
+apiBaseUrlEl.addEventListener('change', async () => {
+  try {
+    const value = apiBaseUrl(apiBaseUrlEl.value.trim());
+    apiBaseUrlEl.value = value;
+    await chrome.storage.local.set({ apiBaseUrl: value });
+  } catch (error) {
+    keyHint.textContent = error.message;
+    keyHint.className = 'key-hint error';
+  }
+});
+apiKeyEl.addEventListener('change', async () => {
+  try {
+    const value = apiKey(apiKeyEl.value);
+    await chrome.storage.local.set({ apiKey: value });
+  } catch (error) {
+    keyHint.textContent = error.message;
+    keyHint.className = 'key-hint error';
+  }
+});
+exaKeyEl.addEventListener('change', async () => {
+  try {
+    const value = apiKey(exaKeyEl.value);
+    await chrome.storage.local.set({ exaApiKey: value });
+  } catch (error) {
+    keyHint.textContent = error.message;
+    keyHint.className = 'key-hint error';
+  }
+});
+
 let checkingBridge = false;
 let automaticLoginRequested = false;
 async function requestSignIn(retry = false) {
@@ -151,7 +196,9 @@ async function refreshBridgeWarning() {
   let detail = '';
   try {
     const health = await InTruthConnection.health();
-    bridgeReady = health.ready === true;
+    // Direct API mode (base URL + key) does not need a Codex login.
+    const apiMode = Boolean(apiBaseUrl(apiBaseUrlEl.value.trim())) && Boolean(apiKeyEl.value.trim());
+    bridgeReady = health.ready === true || apiMode;
     const state = health.auth?.state;
     authBtn.hidden = bridgeReady || !health.auth?.canLogin;
     authBtn.textContent = pt(state === 'pending' ? 'authReopen' : 'authRetry');
@@ -304,8 +351,12 @@ toggleBtn.addEventListener('click', async () => {
       return;
     }
     const selectedModel = modelId(modelEl.value.trim());
+    const baseUrl = apiBaseUrl(apiBaseUrlEl.value.trim());
+    const key = apiKey(apiKeyEl.value);
+    const exaKey = apiKey(exaKeyEl.value);
     await chrome.storage.local.set({ whisperModel: whisperEl.value,
-      transcriptLanguage: languageEl.value, selectedModel, recordingDate: recordingDateEl.value });
+      transcriptLanguage: languageEl.value, selectedModel, recordingDate: recordingDateEl.value,
+      apiBaseUrl: baseUrl, apiKey: key, exaApiKey: exaKey });
     const response = await chrome.runtime.sendMessage({ type: 'START_FACTCHECK' });
     if (!response?.ok) throw new Error(response?.error || pt('unknownError'));
     setActive(true);

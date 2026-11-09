@@ -19,7 +19,10 @@ const { root, createServer, launchBrowser, mockRuntime } = require('./browser-he
     await popup.goto(server.base + '/realtime-factcheck/src/popup/popup.html');
     await popup.waitForFunction(() => !document.querySelector('#toggleBtn').disabled);
     assert.equal(await popup.locator('#modelSelect').inputValue(), 'gpt-6-luna');
-    assert.equal(await popup.locator('input[type=password]').count(), 0);
+    // Optional API/Exa key fields exist but no secret is ever pre-filled.
+    assert.equal(await popup.locator('input[type=password]').count(), 2);
+    assert.equal(await popup.locator('#apiKey').inputValue(), '');
+    assert.equal(await popup.locator('#exaKey').inputValue(), '');
     server.state.ready = false;
     await popup.evaluate(() => refreshBridgeWarning());
     assert.equal(await popup.locator('#toggleBtn').isDisabled(), true);

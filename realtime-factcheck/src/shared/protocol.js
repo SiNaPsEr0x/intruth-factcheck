@@ -13,7 +13,30 @@
     return value;
   }
   const PREFERENCE_KEYS = new Set(['whisperModel', 'transcriptLanguage', 'selectedModel', 'recordingDate',
-    'rtfcPanelWidth', 'rtfcFloating', 'rtfcLeft', 'rtfcTop', 'rtfcHeight']);
+    'rtfcPanelWidth', 'rtfcFloating', 'rtfcLeft', 'rtfcTop', 'rtfcHeight', 'apiBaseUrl', 'apiKey', 'exaApiKey']);
+  // Base URL of an OpenAI-compatible API. https for remote providers; plain http
+  // only on the loopback interface (local providers such as Ollama). Credentials
+  // in the URL are rejected — the key travels in the Authorization header instead.
+  function apiBaseUrl(value) {
+    if (value === undefined || value === null || value === '') return '';
+    if (typeof value !== 'string' || value.length > 300) throw new Error('Invalid API base URL.');
+    let url;
+    try { url = new URL(value.trim()); } catch { throw new Error('Invalid API base URL.'); }
+    const loopback = url.protocol === 'http:' &&
+      ['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname.toLowerCase());
+    if (url.protocol !== 'https:' && !loopback) throw new Error('API base URL must use https (http only on localhost).');
+    if (url.username || url.password || url.hash || url.search) throw new Error('API base URL must not contain credentials, query or fragment.');
+    return url.href.replace(/\/+$/, '');
+  }
+  // API keys are opaque secrets: no whitespace/control chars, bounded length.
+  // Never logged or included in error messages by callers.
+  function apiKey(value) {
+    if (value === undefined || value === null || value === '') return '';
+    if (typeof value !== 'string' || value.length > 200 || /[\s]/.test(value) || /[\u0000-\u001f\u007f]/.test(value)) {
+      throw new Error('Invalid API key.');
+    }
+    return value;
+  }
   async function readSettings(storage) {
     // Persist only supported preferences; authentication belongs to Codex.
     const values = await storage.get(null);
@@ -97,7 +120,7 @@
     });
   }
   const api = { DEFAULT_MODEL, BRIDGE_URL, VERDICTS, CONFIDENCE, modelId, readSettings, cleanSources, validateClaims,
-    SPEAKER_PARSE_NOISE, parseSpeakersFromTitle };
+    SPEAKER_PARSE_NOISE, parseSpeakersFromTitle, apiBaseUrl, apiKey };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.InTruthProtocol = api;
 })(globalThis);
