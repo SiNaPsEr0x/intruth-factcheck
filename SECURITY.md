@@ -66,7 +66,9 @@ The separate metadata-only merge handler requires:
 
 The merge API is given the tested SHA. CI is explicitly dispatched again after
 merging. GitHub branch protections and required approvals are respected; the
-handler never uses an admin bypass. Conflicts, missing fixes, scanner outages,
+handler never uses an admin bypass. Dependabot's automatic "rebase this PR on the default branch"
+pull request, opened when the default branch changes, is not a dependency
+update and stops at the file check. Conflicts, missing fixes, scanner outages,
 new CodeQL findings, major upgrades and coordinated vendor rebuilds stop
 integration. Automatic dependency repair does not rewrite arbitrary application
 logic or rotate an exposed secret. Code findings require validated patches.
