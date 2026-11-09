@@ -1,11 +1,14 @@
 // Codex CLI is the only inference provider. Audio stays in the browser.
 importScripts('../shared/protocol.js');
 importScripts('../shared/connection.js');
-const { DEFAULT_MODEL, BRIDGE_URL, readSettings, modelId, cleanSources, validateClaims, parseSpeakersFromTitle } = InTruthProtocol;
+const { DEFAULT_MODEL, BRIDGE_URL, readSettings, modelId, cleanSources, validateClaims, parseSpeakersFromTitle, apiBaseUrl, apiKey } = InTruthProtocol;
 let TRANSCRIPT_LANGUAGE = 'auto';
 let WHISPER_MODEL = 'base';
 let SELECTED_MODEL = DEFAULT_MODEL;
 let RECORDING_DATE = '';
+let API_BASE_URL = '';
+let API_KEY = '';
+let EXA_API_KEY = '';
 
 function resolvedLanguage() {
   if (TRANSCRIPT_LANGUAGE !== 'auto') return TRANSCRIPT_LANGUAGE;
@@ -18,6 +21,12 @@ async function loadSettings() {
   TRANSCRIPT_LANGUAGE = data.transcriptLanguage || 'auto';
   SELECTED_MODEL = modelId(data.selectedModel);
   RECORDING_DATE = /^\d{4}-\d{2}-\d{2}$/.test(data.recordingDate || '') ? data.recordingDate : '';
+  // Optional direct API mode for OpenAI-compatible providers (base URL + key set
+  // in the popup). Empty strings keep the default Codex CLI login flow.
+  API_BASE_URL = apiBaseUrl(data.apiBaseUrl || '');
+  API_KEY = apiKey(data.apiKey || '');
+  // Optional Exa key: enables real web search in direct API mode.
+  EXA_API_KEY = apiKey(data.exaApiKey || '');
   await chrome.storage.local.set({ selectedModel: SELECTED_MODEL });
 }
 
@@ -111,7 +120,7 @@ function pumpRequests() {
   }
 }
 
-function callCodex(prompt, instructions, webSearch = false, session = sessionId) {
+function callCodex(prompt, instructions, webSearch = false, session = sessionId, searchQuery = '') {
   return new Promise((resolve, reject) => {
     if (session !== sessionId) { reject(new Error('Session ended.')); return; }
     if (requestQueue.length >= 16) { reject(new Error('Fact-check queue full. Pause the video to let Codex catch up.')); return; }
@@ -123,7 +132,13 @@ function callCodex(prompt, instructions, webSearch = false, session = sessionId)
         const response = await fetch(BRIDGE_URL + '/v1/factcheck', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'X-InTruth-Client': 'extension-v2' },
-          body: JSON.stringify({ prompt, instructions, webSearch, model: SELECTED_MODEL }),
+          body: JSON.stringify({
+            prompt, instructions, webSearch, model: SELECTED_MODEL,
+            // Direct API mode (OpenAI-compatible): sent only to the local bridge.
+            ...(API_KEY && API_BASE_URL ? { api: { baseUrl: API_BASE_URL, key: API_KEY, exaKey: EXA_API_KEY } } : {}),
+            // Query for Exa web search during the grounded pass.
+            ...(searchQuery ? { searchQuery } : {}),
+          }),
           signal: controller.signal,
         });
         const data = await response.json();
@@ -380,7 +395,7 @@ async function groundAndUpdate(contextText, fastResults, title, lexicalSummary, 
     try {
       const matches = await callCodex(JSON.stringify({ video: title, recordingDate: pageDate,
         language, transcript: contextText, claim: fast.claim, preliminaryVerdict: fast.verdict,
-        lexicalAnalysis: lexicalSummary }), GROUNDED_PROMPT + `\nWrite claim and explanations in ${language}.`, true, session);
+        lexicalAnalysis: lexicalSummary }), GROUNDED_PROMPT + `\nWrite claim and explanations in ${language}.`, true, session, fast.claim);
       if (matches.length !== 1) throw new Error('Expected exactly one verified claim.');
       result = matches[0];
       result.sources = cleanSources(result.sources);
@@ -553,7 +568,8 @@ async function startFactCheck() {
   try {
     await loadSettings();
     const health = await InTruthConnection.health();
-    if (!health.ready) {
+    // With a direct API base URL + key configured, the Codex login is not required.
+    if (!health.ready && !(API_KEY && API_BASE_URL)) {
       throw new Error('Codex sign-in required. Open the InTruth popup.');
     }
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });

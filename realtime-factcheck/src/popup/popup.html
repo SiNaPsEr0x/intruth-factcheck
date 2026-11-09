@@ -24,6 +24,20 @@
         <div class="bridge-warning" id="bridgeWarning" role="status" hidden></div>
         <button class="cache-clear" id="authBtn" type="button" hidden>Accedi a ChatGPT</button>
       </div>
+      <div class="key-field">
+        <label class="key-label" data-i18n="labelApiUrl">API base URL (optional, OpenAI-compatible)</label>
+        <input class="key-input" id="apiBaseUrl" type="text" placeholder="https://api.openai.com/v1" maxlength="300" autocomplete="off" spellcheck="false" aria-label="API base URL"/>
+      </div>
+      <div class="key-field">
+        <label class="key-label" data-i18n="labelApiKey">API key (optional)</label>
+        <input class="key-input" id="apiKey" type="password" maxlength="200" autocomplete="off" spellcheck="false" aria-label="API key"/>
+        <div class="key-hint" data-i18n="apiHint">With both set, fact-checking calls the API directly instead of Codex. Sent only to the local helper on this computer.</div>
+      </div>
+      <div class="key-field">
+        <label class="key-label" data-i18n="labelExaKey">Exa API key (web search, optional)</label>
+        <input class="key-input" id="exaKey" type="password" maxlength="200" autocomplete="off" spellcheck="false" aria-label="Exa API key"/>
+        <div class="key-hint" data-i18n="exaHint">In direct API mode, performs real web search via api.exa.ai so verdicts cite sources actually found online. Sent only to the local helper.</div>
+      </div>
       <div class="key-field" id="whisperModelField">
         <label class="key-label" data-i18n="labelWhisper">Transcription (local, WebGPU)</label>
         <select class="key-input key-select" id="whisperModel">
