@@ -1,6 +1,10 @@
 // overlay.js
 
-console.log('[overlay] content script loaded');
+// Debug logging is opt-in via ?intruth-debug in the page URL.
+const DEBUG = new URLSearchParams(location.search).has('intruth-debug');
+const debugLog = (...args) => { if (DEBUG) console.log(...args); };
+
+debugLog('[overlay] content script loaded');
 
 function escapeHtml(s) {
   return String(s)
@@ -164,15 +168,25 @@ const pendingCards    = new Map();
 const pendingCardTimes = new Map();
 
 // A stalled check is visibly unverified; a late answer can still replace it.
-setInterval(() => {
-  for (const [key, time] of pendingCardTimes) {
-    if (Date.now() - time > 180000) {
-      const card = pendingCards.get(key);
-      if (card?._resultData) updateVerdict({ ...card._resultData, _fastClaim: card._resultData.claim,
-        verdict: 'UNVERIFIABLE', confidence: 'LOW', sources: [], pending: false, verificationFailed: true });
+// The sweep timer only runs while the panel is open (started in createPanel,
+// cleared in removePanel) so it never leaks into pages without the overlay.
+let pendingSweepTimer = null;
+function startPendingSweep() {
+  if (pendingSweepTimer) return;
+  pendingSweepTimer = setInterval(() => {
+    for (const [key, time] of pendingCardTimes) {
+      if (Date.now() - time > 180000) {
+        const card = pendingCards.get(key);
+        if (card?._resultData) updateVerdict({ ...card._resultData, _fastClaim: card._resultData.claim,
+          verdict: 'UNVERIFIABLE', confidence: 'LOW', sources: [], pending: false, verificationFailed: true });
+      }
     }
-  }
-}, 15000);
+  }, 15000);
+}
+function stopPendingSweep() {
+  clearInterval(pendingSweepTimer);
+  pendingSweepTimer = null;
+}
 
 let lastTranscriptTimestamp = '';
 const sentenceTimestamps   = [];
@@ -200,46 +214,8 @@ function getSpeakerColor(name) {
   return speakerColorMap.get(name);
 }
 
-// ── Speaker parsing ───────────────────────────────────────────────────────────
-const SPEAKER_PARSE_NOISE = new Set(['debate','presidential','vp','vice','2024','2023','2022','2021','2020','2019','2016','surrounded','tonight','live','full','official']);
-
-function parseSpeakersFromTitle(title) {
-  if (!title) return [];
-  const clean = title.split('|')[0].trim();
-
-  // 'N role vs N role' — e.g. '1 Liberal vs 20 Conservatives'
-  const roleMatch = clean.match(/(\d+)\s+([a-z]+(?:\s+[a-z]+)?)\s+(?:vs?\.?|versus)\s+(\d+)\s+([a-z]+(?:\s+[a-z]+)?)/i);
-  if (roleMatch) {
-    const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
-    return [cap(roleMatch[2]), cap(roleMatch[4])];
-  }
-
-  // 'Name vs N Description' — second side starts with digit, e.g. 'Dean Withers vs 20 MAGA Women'
-  const nameVsGroupMatch = clean.match(/([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\s+(?:vs?\.?|versus)\s+(\d+)\s+(.+)/i);
-  if (nameVsGroupMatch) {
-    const name = nameVsGroupMatch[1].trim().split(' ').pop();
-    const groupWords = nameVsGroupMatch[3].trim().split(/\s+/);
-    const group = groupWords.filter(w => !SPEAKER_PARSE_NOISE.has(w.toLowerCase())).pop() || groupWords.pop();
-    return [name, group];
-  }
-
-  // split on vs/and — take last non-noise capitalized word from each side
-  const vsSplit = clean.split(/\s+(?:vs?\.?|versus|and|&)\s+/i);
-  if (vsSplit.length >= 2) {
-    const lastName = part => {
-      const words = part.trim().split(/\s+/);
-      for (let i = words.length - 1; i >= 0; i--) {
-        if (/^[A-Z]/.test(words[i]) && !SPEAKER_PARSE_NOISE.has(words[i].toLowerCase())) return words[i];
-      }
-      return null;
-    };
-    const a = lastName(vsSplit[0]);
-    const b = lastName(vsSplit[1]);
-    if (a && b) return [a, b];
-  }
-
-  return [];
-}
+// Speaker parsing lives in the shared protocol module (InTruthProtocol.parseSpeakersFromTitle)
+// so the overlay and the service worker always use the same heuristic.
 
 let lastActiveSpeaker = null; // track most recently labeled speaker
 
@@ -254,39 +230,19 @@ function normalizeSpeakerName(name) {
   return name; // unknown speaker — return as-is
 }
 
-function getClaimSpeaker(claimText) {
-  if (!speakers.length) return 'Other';
-  const lower = claimText.toLowerCase();
-
-  // direct name match
-  for (const speaker of speakers) {
-    if (lower.includes(speaker.toLowerCase())) return speaker;
-  }
-
-  // partial name match (handles "Vice President Harris" → "Harris")
-  for (const speaker of speakers) {
-    const parts = speaker.toLowerCase().split(' ');
-    if (parts.some(p => p.length > 3 && lower.includes(p))) return speaker;
-  }
-
-  // fallback: use last active speaker for vague references
-  if (lastActiveSpeaker) return lastActiveSpeaker;
-
-  return 'Other';
-}
-
 // ── Speaker ID confirmation ──────────────────────────────────────────────────
 
 const confirmedSpeakerMap = {}; // { speakerId: 'Harris' }
 const pendingSpeakerIds   = new Set(); // IDs waiting for confirmation
 
-function showSpeakerBanner(speakerId, sample) {
+function showSpeakerBanner(speakerId, sample, retries = 0) {
   const sid = String(speakerId);
   if (pendingSpeakerIds.has(sid)) return;
   if (sid in confirmedSpeakerMap) return;
-  // if speakers not yet parsed from title, retry once after 1s
+  // if speakers not yet parsed from title, retry a bounded number of times
+  // (an unbounded retry looped forever whenever the title yields no names)
   if (!speakers.length) {
-    setTimeout(() => showSpeakerBanner(speakerId, sample), 1000);
+    if (retries < 10) setTimeout(() => showSpeakerBanner(speakerId, sample, retries + 1), 1000);
     return;
   }
   pendingSpeakerIds.add(sid);
@@ -329,12 +285,6 @@ function showSpeakerBanner(speakerId, sample) {
 
 // ── Speaker confirmation state ───────────────────────────────────────────────
 
-function allSpeakersConfirmed() {
-  // true only when every speaker parsed from the title has been confirmed (or skipped) by the user
-  // speaker IDs 0, 1, 2... are assigned in order of first appearance — matches speakers array indices
-  if (!speakers.length) return false;
-  return speakers.every((_, i) => String(i) in confirmedSpeakerMap);
-}
 function retryTagAllCards() {
   // retroactively tag all grounded cards once speakers are confirmed
   if (!verdictListEl) return;
@@ -488,6 +438,7 @@ function createPanel() {
   ].join('');
 
   document.body.appendChild(panel);
+  startPendingSweep();
 
   transcriptFeedEl = panel.querySelector('#rtfc-transcript-feed');
   interimEl        = panel.querySelector('#rtfc-interim');
@@ -513,6 +464,7 @@ function createPanel() {
 }
 
 function removePanel() {
+  stopPendingSweep();
   panel?.remove();
   panel = null;
   transcriptFeedEl = null;
@@ -975,13 +927,13 @@ function makeDraggable(panel) {
 
 // ── Messages ──────────────────────────────────────────────────────────────────
 chrome.runtime.onMessage.addListener((msg) => {
-  console.log('[overlay] message received:', msg.type);
+  debugLog('[overlay] message received:', msg.type);
   switch (msg.type) {
 
     case 'START_FACTCHECK':
       createPanel();
       startSession();
-      speakers = parseSpeakersFromTitle(document.title || '');
+      speakers = InTruthProtocol.parseSpeakersFromTitle(document.title || '');
       speakerColorMap.clear();
       chrome.runtime.sendMessage({
         type:  'PAGE_TITLE',

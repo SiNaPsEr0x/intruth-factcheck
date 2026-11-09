@@ -40,7 +40,6 @@
       ],
       "js": [
         "src/shared/protocol.js",
-        "src/content/lexical-features.js",
         "src/content/session-export.js",
         "src/content/overlay.js"
       ],
