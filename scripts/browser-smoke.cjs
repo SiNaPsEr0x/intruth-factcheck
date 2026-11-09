@@ -31,7 +31,7 @@ const { root, createServer, launchBrowser, mockRuntime } = require('./browser-he
     const page = await context.newPage();
     await page.goto('https://www.youtube.com/watch?v=intruth-test');
     await page.addStyleTag({ path: path.join(root, 'realtime-factcheck/src/content/overlay.css') });
-    for (const script of ['shared/protocol.js', 'content/lexical-features.js', 'content/session-export.js', 'content/overlay.js']) {
+    for (const script of ['shared/protocol.js', 'content/session-export.js', 'content/overlay.js']) {
       await page.addScriptTag({ path: path.join(root, 'realtime-factcheck/src', script) });
     }
     const send = message => page.evaluate(value => globalThis.__dispatchInTruth(value), message);
