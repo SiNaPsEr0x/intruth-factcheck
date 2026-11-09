@@ -31,6 +31,22 @@ it; lint and CI reject stale metadata. This SBOM is not a complete provenance
 inventory of every component embedded upstream, and model weights themselves
 are not audited by these dependency scanners.
 
+## Upstream mirror
+
+`master` in this fork is a read-only mirror of
+`rpanigrahi222/intruth-factcheck@master`; `main` is the default branch and the
+only place where this fork's changes are developed. The `Sync upstream creator`
+workflow runs every 6 hours and on manual dispatch. It requests the upstream
+head through the GitHub API, compares it with `master`, moves the ref only when
+the SHA differs, and re-reads the branch afterwards to confirm the result.
+Nothing from upstream is checked out, built or executed: the job runs its own
+default-branch script and both values that reach a request path are validated,
+so the mirror cannot be pointed at another repository or ref. A SHA that does
+not come back as a full 40-character commit, an unreadable upstream and a
+verification mismatch all fail the run instead of silently drifting. The
+default `GITHUB_TOKEN` with `contents: write` is sufficient; the workflow uses
+no personal access token and no third-party repair service.
+
 Two exact historical Gitleaks fingerprints in `.gitleaksignore` are reviewed
 false positives from minified upstream tokenizer expressions (`unk_token`). No
 file, directory, secret rule or future vendor update is broadly exempted.

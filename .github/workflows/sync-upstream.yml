@@ -1,0 +1,38 @@
+name: Sync upstream creator
+# Mirrors rpanigrahi222/intruth-factcheck@master onto this fork's master branch.
+# The mirror only moves a ref through the GitHub API, so upstream content is
+# never checked out, built or executed: the job runs its own default-branch
+# script and writes a ref in this repository only.
+on:
+  schedule:
+    - cron: '29 */6 * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: upstream-mirror
+  cancel-in-progress: false
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      # Only this repository's default-branch code runs with the write token.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            scripts/upstream
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - name: Mirror upstream master
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          UPSTREAM_REPOSITORY: rpanigrahi222/intruth-factcheck
+          UPSTREAM_BRANCH: master
+          UPSTREAM_MIRROR_BRANCH: master
+        run: node scripts/upstream/sync-upstream.cjs

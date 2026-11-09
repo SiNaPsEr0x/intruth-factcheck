@@ -263,6 +263,16 @@ Gli scanner non richiedono chiavi esterne. GitHub deve però consentire alle
 Actions di creare PR. La configurazione e i limiti sono descritti in
 [SECURITY.md](SECURITY.md).
 
+### Allineamento al repository del creatore
+
+Il branch `master` di questo fork è uno specchio di
+`rpanigrahi222/intruth-factcheck@master`. Il workflow `Sync upstream creator`
+lo riallinea ogni 6 ore e su richiesta, e aggiorna il ref solo se l'upstream è
+cambiato. Il mirror sposta un puntatore tramite l'API di GitHub: il codice
+dell'autore non viene mai estratto, compilato o eseguito. Lo sviluppo avviene
+su `main`, che resta il branch predefinito. Per forzare un allineamento
+immediato, avvia a mano il workflow dalla scheda Actions.
+
 ## Se qualcosa non funziona
 
 - **Il bridge non risponde:** se hai usato l'installatore, controlla di averlo
@@ -332,6 +342,13 @@ For development, use `npm ci`, `npm test` and `npm run lint`. Browser tests use
 Playwright; install Chromium with `npm exec -- playwright install chromium`.
 See [software versions](docs/SOFTWARE.md), [validation results](docs/VALIDATION.md)
 and [security policy](SECURITY.md) for more detail.
+
+The `master` branch of this fork mirrors
+`rpanigrahi222/intruth-factcheck@master`. The `Sync upstream creator` workflow
+realigns it every 6 hours and on demand, writing the ref only when upstream
+changed. It moves a pointer through the GitHub API, so upstream code is never
+checked out, built or executed. Development happens on `main`, which stays the
+default branch; run the workflow manually from the Actions tab to sync now.
 
 Based on [Risha Panigrahi's original project](https://github.com/rpanigrahi222/intruth-factcheck),
 under the original noncommercial [LICENSE](LICENSE).
