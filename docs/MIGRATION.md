@@ -41,6 +41,6 @@ Web/Common 1.30.0, npm 12.2.1 and Playwright 1.64.1. The web bundle is rebuilt
 against the stable runtime with verified package integrity, artifact checksums
 and matching JavaScript/WASM assets. See SOFTWARE.md and VALIDATION.md.
 
-CI covers Node 22/24/26, Windows/macOS setup, browser/MV3 integration, portable
+CI covers Node 22/24/26, Windows setup, browser/MV3 integration, portable
 ZIPs and security scans. The original license and author attribution remain in
 LICENSE and NOTICE.md. Supported browsing stays limited to YouTube/Jubilee.
