@@ -243,7 +243,7 @@ GitHub Actions esegue i controlli a ogni PR, a ogni push su `main` e ogni notte.
 Puoi avviarli anche manualmente. La pipeline include OSV-Scanner sul lockfile e
 sullo SBOM dei runtime distribuiti, `npm audit`, CodeQL per JavaScript e Actions,
 Gitleaks sull'intera cronologia, actionlint e zizmor. Controlla anche i test su
-Node 22, 24 e 26, gli installer Windows e macOS, il browser, i bundle e gli ZIP.
+Node 22, 24 e 26, l'installer Windows, il browser, i bundle e gli ZIP.
 
 Dependabot propone gli aggiornamenti delle dipendenze e delle Actions. La
 manutenzione quotidiana prova a correggere il lockfile con

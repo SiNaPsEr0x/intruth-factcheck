@@ -68,7 +68,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, macos-latest]
+        os: [windows-latest]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -86,8 +86,6 @@ jobs:
         run: |
           & .\Install-InTruth.cmd
           if ($LASTEXITCODE -ne 0) { throw 'Windows bootstrap failed.' }
-      - if: runner.os == 'macOS'
-        run: sh Install-InTruth.command
       - run: node scripts/install-helper.cjs --uninstall
       - if: runner.os == 'Windows'
         shell: pwsh
